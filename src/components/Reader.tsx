@@ -9,7 +9,7 @@ import { getReadChapters, addReadChapter } from '@/src/lib/storage'
 interface Props {
   slug: string
   chapterId: string
-  ChapterDetail
+  data: ChapterDetail
 }
 
 export default function Reader({ slug, chapterId, data }: Props) {
@@ -190,7 +190,7 @@ export default function Reader({ slug, chapterId, data }: Props) {
                           <div className="w-2 h-2 rounded-full bg-purple-400 flex-shrink-0 animate-pulse" />
                         )}
                         <span className={`text-sm ${isRead ? 'text-purple-300 font-medium' : 'text-gray-300 group-hover:text-white'}`}>
-                          {ch.title}
+                          {ch.title ? `${ch.title}` : `Chapter ${ch.number}`}
                         </span>
                       </div>
                       {ch.date && (
