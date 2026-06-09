@@ -1,0 +1,17 @@
+import { getChapterImages } from '@/src/lib/scraper'
+
+export async function GET(
+  _request: Request,
+  { params }: { params: Promise<{ slug: string; chapterId: string }> }
+) {
+  const { slug, chapterId } = await params
+  try {
+    const data = await getChapterImages(slug, chapterId)
+    if (!data) {
+      return Response.json({ error: 'Chapter tidak ditemukan' }, { status: 404 })
+    }
+    return Response.json(data)
+  } catch {
+    return Response.json({ error: 'Gagal mengambil chapter' }, { status: 500 })
+  }
+}
