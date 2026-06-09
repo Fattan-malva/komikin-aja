@@ -3,7 +3,11 @@
 import { useRouter } from 'next/navigation'
 import { useState, FormEvent } from 'react'
 
-export default function SearchBar() {
+interface SearchBarProps {
+  onSearch?: () => void
+}
+
+export default function SearchBar({ onSearch }: SearchBarProps) {
   const [query, setQuery] = useState('')
   const router = useRouter()
 
@@ -11,6 +15,7 @@ export default function SearchBar() {
     e.preventDefault()
     if (query.trim()) {
       router.push(`/search?q=${encodeURIComponent(query.trim())}`)
+      onSearch?.()
     }
   }
 

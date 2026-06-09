@@ -8,6 +8,7 @@ export default function Header() {
   const [mobileOpen, setMobileOpen] = useState(false)
   const [hidden, setHidden] = useState(false)
   const lastScrollY = useRef(0)
+  const headerRef = useRef<HTMLElement>(null)
 
   useEffect(() => {
     const handleScroll = () => {
@@ -26,8 +27,22 @@ export default function Header() {
     return () => window.removeEventListener('scroll', handleScroll)
   }, [])
 
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (headerRef.current && !headerRef.current.contains(event.target as Node) && mobileOpen) {
+        setMobileOpen(false)
+      }
+    }
+
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => document.removeEventListener('mousedown', handleClickOutside)
+  }, [mobileOpen])
+
   return (
-    <header className={`sticky top-0 z-50 bg-[#0f0f1a]/80 backdrop-blur-md border-b border-white/5 transition-transform duration-300 ${hidden ? '-translate-y-full' : 'translate-y-0'}`}>
+    <header
+      ref={headerRef}
+      className={`sticky top-0 z-50 bg-[#0f0f1a]/80 backdrop-blur-md border-b border-white/5 transition-transform duration-300 ${hidden ? '-translate-y-full' : 'translate-y-0'}`}
+    >
       <div className="max-w-7xl mx-auto px-4 h-16 flex items-center justify-between">
         <Link href="/" className="flex items-center gap-2">
           <span className="text-xl font-bold text-white">
@@ -68,7 +83,7 @@ export default function Header() {
 
       {mobileOpen && (
         <div className="md:hidden border-t border-white/5 bg-[#0f0f1a] px-4 py-4 space-y-4">
-          <SearchBar />
+          <SearchBar onSearch={() => setMobileOpen(false)} />
           <nav className="flex flex-col gap-2">
             <Link href="/" className="text-sm text-gray-300 hover:text-white py-1" onClick={() => setMobileOpen(false)}>
               Home
