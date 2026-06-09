@@ -239,6 +239,17 @@ export async function getChapterImages(slug: string, chapterSlug: string): Promi
     }
   }
 
+  if (chapters.length === 0) {
+    try {
+      const detail = await getDetail(slug)
+      if (detail?.chapters) {
+        chapters = detail.chapters
+      }
+    } catch {
+      chapters = []
+    }
+  }
+
   return { images, prev, next, chapters }
 }
 

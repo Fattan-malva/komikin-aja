@@ -17,7 +17,7 @@ export default function Reader({ slug, chapterId, data }: Props) {
   const [modalOpen, setModalOpen] = useState(false)
   const [readChapters] = useState(() => getReadChapters())
 
-  const currentNum = chapterId.replace('chapter-', '')
+  const currentNum = chapterId.replace('chapter-', '').split('.')[0]
 
   const isReading = readChapters.has(chapterId)
 
