@@ -26,7 +26,7 @@ export default function RootLayoutWrapper({
   return (
     <html lang="id" className={`${geistSans.variable} ${geistMono.variable}`}>
       <body className="min-h-screen flex flex-col antialiased">
-        {!isReaderPage && <Header />}
+         <Header />
         <main className="flex-1 w-full max-w-7xl mx-auto px-4 py-6">
           {children}
         </main>

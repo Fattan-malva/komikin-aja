@@ -25,6 +25,7 @@ export interface ChapterDetail {
   images: string[]
   prev?: string
   next?: string
+  chapters?: Chapter[]
 }
 
 export interface Genre {

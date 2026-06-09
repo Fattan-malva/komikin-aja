@@ -224,7 +224,22 @@ export async function getChapterImages(slug: string, chapterSlug: string): Promi
   if (prevMatch) prev = prevMatch[1].split('/').filter(Boolean).pop() || ''
   if (nextMatch) next = nextMatch[1].split('/').filter(Boolean).pop() || ''
 
-  return { images, prev, next }
+  let chapters: Chapter[] = []
+  const chapterListEl = $('#chapter-list')
+  const hxGet = chapterListEl.attr('hx-get')
+  if (hxGet) {
+    const params = new URLSearchParams(hxGet.split('?')[1])
+    const mangaId = params.get('manga_id') || ''
+    if (mangaId) {
+      try {
+        chapters = await getChapterList(mangaId)
+      } catch {
+        chapters = []
+      }
+    }
+  }
+
+  return { images, prev, next, chapters }
 }
 
 export async function searchKomik(query: string, _page: number = 1): Promise<KomikListResponse> {
