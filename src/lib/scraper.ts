@@ -105,6 +105,80 @@ export async function getPopular(page: number = 1): Promise<KomikListResponse> {
   return { komik, currentPage: page }
 }
 
+export async function getByType(type: string, page: number = 1): Promise<KomikListResponse> {
+  const domain = getDomain()
+  const nonce = await getSearchNonce()
+
+  // Map type to the format expected by the API
+  const typeMap: Record<string, string> = {
+    'manhwa': 'Manhwa',
+    'manga': 'Manga',
+    'manhua': 'Manhua'
+  }
+
+  const searchType = typeMap[type.toLowerCase()] || type
+
+  const params = new URLSearchParams()
+  params.append('nonce', nonce)
+  params.append('type', JSON.stringify([searchType]))
+  params.append('page', String(page))
+  params.append('order', 'desc')
+  params.append('orderby', 'popular')
+
+  const { data } = await axiosInstance.post(
+    `${domain}/wp-admin/admin-ajax.php?action=advanced_search`,
+    params.toString(),
+    { headers: { 'Content-Type': 'application/x-www-form-urlencoded' } }
+  )
+
+  const $ = cheerio.load(data)
+  const seen = new Set<string>()
+  const komik: Komik[] = []
+
+  $('div.group-data-\\[mode\\=horizontal\\]\\:hidden').each((_, el) => {
+    const card = $(el)
+    const link = card.find('a[color="primary"]').first()
+    const href = link.attr('href') || ''
+    const slug = href.split('/manga/')[1]?.replace(/\/$/, '') || ''
+    if (!slug || seen.has(slug)) return
+    seen.add(slug)
+
+    const title = card.find('h1.text-\\[15px\\]').first().text().trim()
+    const thumbnail = card.find('img.wp-post-image').first().attr('src') || ''
+    const rating = card.find('div.numscore').first().text().trim()
+    const status = card.find('p.font-normal.text-xs').last().text().trim()
+
+    if (title) {
+      komik.push({ slug, title, thumbnail, rating, status })
+    }
+  })
+
+  let totalPages = 1
+  const pageBtns = $('button[onclick*="addSingularFilter"]').filter((_, el) => {
+    return /addSingularFilter\('page',\s*'(\d+)'/i.test($(el).attr('onclick') || '')
+  })
+  const nums = pageBtns.map((_, el) => {
+    const m = $(el).attr('onclick')?.match(/addSingularFilter\('page',\s*'(\d+)'/i)
+    return m ? parseInt(m[1]) : NaN
+  }).get().filter(n => !isNaN(n))
+  if (nums.length > 0) totalPages = Math.max(...nums)
+
+  return { komik, totalPages, currentPage: page }
+}
+
+// Fungsi spesifik untuk masing-masing tipe
+export async function getManhwa(page: number = 1): Promise<KomikListResponse> {
+  return getByType('manhwa', page)
+}
+
+export async function getManga(page: number = 1): Promise<KomikListResponse> {
+  return getByType('manga', page)
+}
+
+export async function getManhua(page: number = 1): Promise<KomikListResponse> {
+  return getByType('manhua', page)
+}
+
 export async function getDetail(slug: string): Promise<Komik | null> {
   const domain = getDomain()
   const url = `${domain}/manga/${slug}/`
