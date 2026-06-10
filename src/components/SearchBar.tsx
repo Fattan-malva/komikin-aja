@@ -26,7 +26,7 @@ export default function SearchBar({ onSearch }: SearchBarProps) {
         value={query}
         onChange={e => setQuery(e.target.value)}
         placeholder="Search komik..."
-        className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-sm text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-[#a855f7] focus:border-transparent transition-all"
+        className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-base md:text-sm text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-[#a855f7] focus:border-transparent transition-all"
       />
       <button type="submit" className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-white">
         <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
