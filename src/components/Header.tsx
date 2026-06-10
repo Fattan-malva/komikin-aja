@@ -60,6 +60,9 @@ export default function Header() {
           <Link href="/search" className="text-sm text-gray-300 hover:text-white transition-colors">
             Search
           </Link>
+          <Link href="/bookmarks" className="text-sm text-gray-300 hover:text-white transition-colors">
+            Bookmarks
+          </Link>
         </nav>
 
         <div className="hidden md:block w-64">
@@ -93,6 +96,9 @@ export default function Header() {
             </Link>
             <Link href="/search" className="text-sm text-gray-300 hover:text-white py-1" onClick={() => setMobileOpen(false)}>
               Search
+            </Link>
+            <Link href="/bookmarks" className="text-sm text-gray-300 hover:text-white py-1" onClick={() => setMobileOpen(false)}>
+              Bookmarks
             </Link>
           </nav>
         </div>

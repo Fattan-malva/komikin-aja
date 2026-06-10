@@ -45,3 +45,16 @@ export interface SearchParams {
   page?: number
   genre?: string
 }
+
+export interface HistoryItem {
+  slug: string
+  title: string
+  thumbnail: string
+  timestamp: number
+}
+
+export interface BookmarkItem {
+  slug: string
+  title: string
+  thumbnail: string
+}

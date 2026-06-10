@@ -3,6 +3,8 @@ import { getDetail } from '@/src/lib/scraper'
 import { proxyImage } from '@/src/lib/utils'
 import GenreBadge from '@/src/components/GenreBadge'
 import ChapterList from '@/src/components/ChapterList'
+import BookmarkButton from '@/src/components/BookmarkButton'
+import HistoryTracker from '@/src/components/HistoryTracker'
 
 interface Props {
   params: Promise<{ slug: string }>
@@ -26,7 +28,12 @@ export default async function KomikDetail({ params }: Props) {
         </div>
 
         <div className="flex-1 space-y-4">
-          <h1 className="text-2xl md:text-3xl font-bold text-white">{komik.title}</h1>
+          <div className="flex items-center justify-between gap-4">
+            <h1 className="text-2xl md:text-3xl font-bold text-white">{komik.title}</h1>
+            <BookmarkButton komik={{ slug: slug, title: komik.title, thumbnail: komik.thumbnail }} />
+          </div>
+
+          <HistoryTracker komik={{ slug: slug, title: komik.title, thumbnail: komik.thumbnail }} />
 
           {komik.synopsis && (
             <div>
