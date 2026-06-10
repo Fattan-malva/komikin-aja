@@ -3,23 +3,40 @@
 import Link from 'next/link'
 import type { Chapter } from '@/src/types'
 import { addReadChapter, getReadChapters } from '@/src/lib/storage'
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState } from 'react'
 
 interface Props {
   slug: string
-  chapters: Chapter[]
 }
 
-export default function ChapterList({ slug, chapters }: Props) {
+export default function ChapterList({ slug }: Props) {
+  const [chapters, setChapters] = useState<Chapter[] | null>(null)
   const [readChapters, setReadChapters] = useState<Set<string>>(new Set())
 
   useEffect(() => {
     setReadChapters(getReadChapters())
   }, [])
 
+  useEffect(() => {
+    fetch(`/api/komik/${slug}?_=${Date.now()}`, { cache: 'no-store' })
+      .then(res => res.json())
+      .then(data => {
+        if (data?.chapters) {
+          const sorted = (data.chapters as Chapter[]).sort(
+            (a, b) => parseFloat(b.number || '0') - parseFloat(a.number || '0'),
+          )
+          setChapters(sorted)
+        }
+      })
+      .catch(() => {})
+  }, [slug])
+
   const handleChapterClick = (chapterSlug: string) => {
     addReadChapter(chapterSlug)
-    // Optionally, update state here if needed immediately, though not critical for list display
+  }
+
+  if (chapters === null) {
+    return <div className="space-y-2 pr-2" />
   }
 
   if (chapters.length === 0) {
@@ -28,11 +45,11 @@ export default function ChapterList({ slug, chapters }: Props) {
 
   return (
     <div className="space-y-2 max-h-[600px] overflow-y-auto pr-2">
-      {chapters.map((ch, i) => {
+      {chapters.map((ch) => {
         const isRead = readChapters.has(ch.slug)
         return (
           <Link
-            key={ch.slug + i}
+            key={ch.slug}
             href={`/baca/${slug}/${ch.slug}`}
             onClick={() => handleChapterClick(ch.slug)}
             className={`flex items-center justify-between px-4 py-3 rounded-lg transition-all duration-200 ${isRead
@@ -48,7 +65,7 @@ export default function ChapterList({ slug, chapters }: Props) {
                   ? 'text-purple-300 font-medium'
                   : 'text-gray-300 group-hover:text-white'
                 }`}>
-                {ch.title ? `${ch.title}` : '' }
+                {ch.title ?? ''}
               </span>
             </div>
             {ch.date && (

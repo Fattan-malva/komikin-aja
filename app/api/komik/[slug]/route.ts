@@ -1,5 +1,7 @@
 import { getDetail } from '@/src/lib/scraper'
 
+export const dynamic = 'force-dynamic'
+
 export async function GET(
   _request: Request,
   { params }: { params: Promise<{ slug: string }> }
