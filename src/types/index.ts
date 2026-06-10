@@ -51,6 +51,7 @@ export interface HistoryItem {
   title: string
   thumbnail: string
   timestamp: number
+  lastChapter?: string
 }
 
 export interface BookmarkItem {

@@ -4,7 +4,7 @@ import Link from 'next/link'
 import { useState, useEffect } from 'react'
 import type { Chapter, ChapterDetail } from '@/src/types'
 import { proxyImage } from '@/src/lib/utils'
-import { getReadChapters, addReadChapter } from '@/src/lib/storage'
+import { getReadChapters, addReadChapter, updateHistoryChapter } from '@/src/lib/storage'
 
 
 interface Props {
@@ -38,6 +38,10 @@ export default function Reader({ slug, chapterId, data }: Props) {
     animationFrameId = requestAnimationFrame(scroll)
     return () => cancelAnimationFrame(animationFrameId)
   }, [autoScrollEnabled, autoScrollSpeed])
+
+  useEffect(() => {
+    updateHistoryChapter(slug, chapterId)
+  }, [slug, chapterId])
 
   const currentNum = chapterId.replace('chapter-', '').split('.')[0]
 

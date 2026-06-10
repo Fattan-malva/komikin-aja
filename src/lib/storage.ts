@@ -90,3 +90,22 @@ export function addToHistory(item: Omit<HistoryItem, 'timestamp'>): void {
     console.error("Error adding to history:", error)
   }
 }
+
+export function updateHistoryChapter(slug: string, chapter: string): void {
+  try {
+    const history = getHistory()
+    const index = history.findIndex(h => h.slug === slug)
+    if (index !== -1) {
+      history[index].lastChapter = chapter
+      history[index].timestamp = Date.now() // Update timestamp to move to top
+      
+      // Move to top
+      const [item] = history.splice(index, 1)
+      history.unshift(item)
+      
+      localStorage.setItem(HISTORY_KEY, JSON.stringify(history))
+    }
+  } catch (error) {
+    console.error("Error updating history chapter:", error)
+  }
+}
