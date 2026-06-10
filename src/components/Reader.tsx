@@ -6,6 +6,7 @@ import type { Chapter, ChapterDetail } from '@/src/types'
 import { proxyImage } from '@/src/lib/utils'
 import { getReadChapters, addReadChapter } from '@/src/lib/storage'
 
+
 interface Props {
   slug: string
   chapterId: string
@@ -59,7 +60,10 @@ export default function Reader({ slug, chapterId, data }: Props) {
                 <Link
                   href={`/baca/${slug}/${data.prev}`}
                   className="flex items-center gap-3 w-full px-3 py-2.5 rounded-xl bg-white/5 hover:bg-white/15 transition-colors text-white"
-                  onClick={() => setNavOpen(false)}
+                  onClick={() => {
+                    setNavOpen(false)
+                    addReadChapter(data.prev!)
+                  }}
                 >
                   <svg className="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
@@ -79,7 +83,10 @@ export default function Reader({ slug, chapterId, data }: Props) {
                 <Link
                   href={`/baca/${slug}/${data.next}`}
                   className="flex items-center gap-3 w-full px-3 py-2.5 rounded-xl bg-white/5 hover:bg-white/15 transition-colors text-white"
-                  onClick={() => setNavOpen(false)}
+                  onClick={() => {
+                    setNavOpen(false)
+                    addReadChapter(data.next!)
+                  }}
                 >
                   <svg className="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
