@@ -50,6 +50,26 @@ export default function Reader({ slug, chapterId, data }: Props) {
 
   const isReading = readChapters.has(chapterId);
 
+  const [liveChapters, setLiveChapters] = useState<Chapter[] | null>(null);
+
+  useEffect(() => {
+    fetch(`/api/komik/${slug}?_=${Date.now()}`, { cache: 'no-store' })
+      .then(res => res.json())
+      .then(data => {
+        if (data?.chapters) {
+          const sorted = (data.chapters as Chapter[]).sort(
+            (a, b) => parseFloat(b.number || '0') - parseFloat(a.number || '0'),
+          )
+          setLiveChapters(sorted)
+        }
+      })
+      .catch(() => {})
+  }, [slug])
+
+  const sortedChapters = (liveChapters ?? data.chapters ?? []).sort(
+    (a, b) => parseFloat(b.number || '0') - parseFloat(a.number || '0'),
+  )
+
   const handleChapterClick = (chapterSlug: string) => {
     addReadChapter(chapterSlug);
   };
@@ -337,8 +357,8 @@ export default function Reader({ slug, chapterId, data }: Props) {
             </div>
 
             <div className="max-h-80 overflow-y-auto p-2">
-              {data.chapters && data.chapters.length > 0 ? (
-                data.chapters.map((ch) => {
+              {sortedChapters.length > 0 ? (
+                sortedChapters.map((ch) => {
                   const isRead = readChapters.has(ch.slug);
                   const isCurrent = ch.slug === chapterId;
                   return (

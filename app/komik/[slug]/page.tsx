@@ -1,19 +1,18 @@
 import { notFound } from 'next/navigation'
-import { unstable_noStore as noStore } from 'next/cache'
+import { connection } from 'next/server'
 import { getDetail } from '@/src/lib/scraper'
 import { proxyImage } from '@/src/lib/utils'
 import GenreBadge from '@/src/components/GenreBadge'
 import ChapterList from '@/src/components/ChapterList'
 import BookmarkButton from '@/src/components/BookmarkButton'
 import HistoryTracker from '@/src/components/HistoryTracker'
-export const dynamic = 'force-dynamic'
 
 interface Props {
   params: Promise<{ slug: string }>
 }
 
 export default async function KomikDetail({ params }: Props) {
-  noStore()
+  await connection()
   const { slug } = await params
   const komik = await getDetail(slug)
 
