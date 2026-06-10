@@ -23,8 +23,8 @@ function BookmarkCard({ item }: { item: Komik }) {
             className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
           />
         </div>
-        <div className="p-3">
-          <h3 className="text-sm font-semibold text-white line-clamp-2 group-hover:text-purple-400 transition-colors">
+                    <div className="p-3 h-[52px] flex items-start">
+          <h3 className="text-sm font-semibold text-white line-clamp-2 group-hover:text-purple-400 transition-colors leading-tight">
             {item.title}
           </h3>
         </div>
@@ -146,11 +146,11 @@ export default function BookmarksPage() {
                         />
                       </svg>
                     </div>
-                    <div>
-                      <h3 className="font-semibold text-white group-hover:text-blue-400 transition-colors">
+                    <div className="min-w-0 max-w-[200px] sm:max-w-[300px] lg:max-w-[400px]">
+                      <h3 className="font-semibold text-white group-hover:text-blue-400 transition-colors truncate">
                         {item.title}
                       </h3>
-                      <p className="text-xs text-gray-400 mt-1 font-mono">
+                      <p className="text-xs text-gray-400 mt-1 font-mono truncate">
                         {item.lastChapter
                           ? `Chapter ${item.lastChapter.replace("chapter-", "").split(".")[0]}`
                           : `/${item.slug}`}

@@ -36,7 +36,19 @@ export default function ChapterList({ slug }: Props) {
   }
 
   if (chapters === null) {
-    return <div className="space-y-2 pr-2" />
+    return (
+      <div className="space-y-2 max-h-[600px] overflow-y-auto pr-2 animate-pulse">
+        {Array.from({ length: 12 }).map((_, i) => (
+          <div key={i} className="flex items-center justify-between px-4 py-3 rounded-lg bg-white/5 border border-transparent">
+            <div className="flex items-center gap-2 min-w-0">
+              <div className="w-2 h-2 rounded-full bg-white/10 flex-shrink-0" />
+              <div className="h-4 bg-white/10 rounded w-40" />
+            </div>
+            <div className="h-3 bg-white/10 rounded w-16 flex-shrink-0" />
+          </div>
+        ))}
+      </div>
+    )
   }
 
   if (chapters.length === 0) {
