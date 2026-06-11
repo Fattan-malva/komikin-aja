@@ -7,6 +7,8 @@ import ChapterList from '@/src/components/ChapterList'
 import BookmarkButton from '@/src/components/BookmarkButton'
 import HistoryTracker from '@/src/components/HistoryTracker'
 
+export const dynamic = 'force-dynamic'
+
 interface Props {
   params: Promise<{ slug: string }>
 }

@@ -53,9 +53,13 @@ export default function Reader({ slug, chapterId, data }: Props) {
   const [liveChapters, setLiveChapters] = useState<Chapter[] | null>(null);
 
   useEffect(() => {
+    if (!modalOpen) return
+
+    let cancelled = false
     fetch(`/api/komik/${slug}?_=${Date.now()}`, { cache: 'no-store' })
       .then(res => res.json())
       .then(data => {
+        if (cancelled) return
         if (data?.chapters) {
           const sorted = (data.chapters as Chapter[]).sort(
             (a, b) => parseFloat(b.number || '0') - parseFloat(a.number || '0'),
@@ -63,8 +67,10 @@ export default function Reader({ slug, chapterId, data }: Props) {
           setLiveChapters(sorted)
         }
       })
-      .catch(() => {})
-  }, [slug])
+      .catch(() => { if (!cancelled) setLiveChapters([]) })
+
+    return () => { cancelled = true }
+  }, [modalOpen, slug])
 
   const sortedChapters = (liveChapters ?? data.chapters ?? []).sort(
     (a, b) => parseFloat(b.number || '0') - parseFloat(a.number || '0'),
