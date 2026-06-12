@@ -1,4 +1,6 @@
 import { getChapterImages } from '@/src/lib/scraper'
+import { getChapterImagesH } from '@/src/lib/scrapper-h'
+import { isHSlug, stripHPrefix } from '@/src/lib/utils'
 
 export async function GET(
   _request: Request,
@@ -6,7 +8,8 @@ export async function GET(
 ) {
   const { slug, chapterId } = await params
   try {
-    const data = await getChapterImages(slug, chapterId)
+    const fromH = isHSlug(slug)
+    const data = await (fromH ? getChapterImagesH(stripHPrefix(slug), chapterId) : getChapterImages(slug, chapterId))
     if (!data) {
       return Response.json({ error: 'Chapter tidak ditemukan' }, { status: 404 })
     }

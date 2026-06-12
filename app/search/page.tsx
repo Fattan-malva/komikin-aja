@@ -1,4 +1,5 @@
 import { searchKomik } from '@/src/lib/scraper'
+import { searchKomikH } from '@/src/lib/scrapper-h'
 import KomikGrid from '@/src/components/KomikGrid'
 import SearchBar from '@/src/components/SearchBar'
 
@@ -10,9 +11,15 @@ export default async function SearchPage({ searchParams }: Props) {
   const { q, page } = await searchParams
   const query = q || ''
 
-  let data: Awaited<ReturnType<typeof searchKomik>> = { komik: [] }
+  let allKomik: Awaited<ReturnType<typeof searchKomik>>['komik'] = []
   if (query) {
-    data = await searchKomik(query, Number(page) || 1)
+    if (query.startsWith('h-')) {
+      const res = await searchKomikH(query.slice(2), Number(page) || 1)
+      allKomik = res.komik
+    } else {
+      const res = await searchKomik(query, Number(page) || 1)
+      allKomik = res.komik
+    }
   }
 
   return (
@@ -25,11 +32,11 @@ export default async function SearchPage({ searchParams }: Props) {
           <h1 className="text-xl font-bold text-white">
             Search: <span className="text-[#a855f7]">{query}</span>
           </h1>
-          <span className="text-sm text-gray-400">{data.komik.length} results</span>
+          <span className="text-sm text-gray-400">{allKomik.length} results</span>
         </div>
       )}
-      {data.komik.length > 0 ? (
-        <KomikGrid komik={data.komik} />
+      {allKomik.length > 0 ? (
+        <KomikGrid komik={allKomik} />
       ) : query ? (
         <div className="text-center py-16">
           <p className="text-gray-400">Tidak ada hasil untuk &ldquo;{query}&rdquo;</p>

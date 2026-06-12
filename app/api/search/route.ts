@@ -1,5 +1,6 @@
 import { NextRequest } from 'next/server'
 import { searchKomik } from '@/src/lib/scraper'
+import { searchKomikH } from '@/src/lib/scrapper-h'
 
 export async function GET(request: NextRequest) {
   const query = request.nextUrl.searchParams.get('q') || ''
@@ -8,8 +9,15 @@ export async function GET(request: NextRequest) {
     return Response.json({ error: 'Query diperlukan' }, { status: 400 })
   }
   try {
-    const data = await searchKomik(query, page)
-    return Response.json(data)
+    let komik: Awaited<ReturnType<typeof searchKomik>>['komik'] = []
+    if (query.startsWith('h-')) {
+      const res = await searchKomikH(query.slice(2), page)
+      komik = res.komik
+    } else {
+      const res = await searchKomik(query, page)
+      komik = res.komik
+    }
+    return Response.json({ komik })
   } catch {
     return Response.json({ error: 'Gagal mencari' }, { status: 500 })
   }

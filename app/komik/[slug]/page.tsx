@@ -1,7 +1,8 @@
 import { notFound } from 'next/navigation'
 import { connection } from 'next/server'
 import { getDetail } from '@/src/lib/scraper'
-import { proxyImage } from '@/src/lib/utils'
+import { getDetailH } from '@/src/lib/scrapper-h'
+import { proxyImage, isHSlug, stripHPrefix } from '@/src/lib/utils'
 import GenreBadge from '@/src/components/GenreBadge'
 import ChapterList from '@/src/components/ChapterList'
 import BookmarkButton from '@/src/components/BookmarkButton'
@@ -16,7 +17,8 @@ interface Props {
 export default async function KomikDetail({ params }: Props) {
   await connection()
   const { slug } = await params
-  const komik = await getDetail(slug)
+  const fromH = isHSlug(slug)
+  const komik = await (fromH ? getDetailH(stripHPrefix(slug)) : getDetail(slug))
 
   if (!komik) notFound()
 

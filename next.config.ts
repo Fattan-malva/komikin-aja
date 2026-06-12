@@ -23,6 +23,7 @@ const nextConfig: NextConfig = {
   },
   env: {
     DOMAIN_KIRYUU: process.env.DOMAIN_KIRYUU,
+    DOMAIN_KOMIK_H: process.env.DOMAIN_KOMIK_H || process.env['DOMAIN_KOMIK_H'],
   },
 };
 

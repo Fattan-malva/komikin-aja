@@ -1,4 +1,6 @@
 import { getDetail } from '@/src/lib/scraper'
+import { getDetailH } from '@/src/lib/scrapper-h'
+import { isHSlug, stripHPrefix } from '@/src/lib/utils'
 
 export const dynamic = 'force-dynamic'
 
@@ -8,7 +10,8 @@ export async function GET(
 ) {
   const { slug } = await params
   try {
-    const data = await getDetail(slug)
+    const fromH = isHSlug(slug)
+    const data = await (fromH ? getDetailH(stripHPrefix(slug)) : getDetail(slug))
     if (!data) {
       return Response.json({ error: 'Komik tidak ditemukan' }, { status: 404 })
     }

@@ -1,6 +1,8 @@
 import { notFound } from 'next/navigation'
 import { connection } from 'next/server'
 import { getChapterImages } from '@/src/lib/scraper'
+import { getChapterImagesH } from '@/src/lib/scrapper-h'
+import { isHSlug, stripHPrefix } from '@/src/lib/utils'
 import Reader from '@/src/components/Reader'
 
 export const dynamic = 'force-dynamic'
@@ -12,7 +14,8 @@ interface Props {
 export default async function BacaPage({ params }: Props) {
   await connection()
   const { slug, chapterId } = await params
-  const data = await getChapterImages(slug, chapterId)
+  const fromH = isHSlug(slug)
+  const data = await (fromH ? getChapterImagesH(stripHPrefix(slug), chapterId) : getChapterImages(slug, chapterId))
 
   if (!data) notFound()
 
