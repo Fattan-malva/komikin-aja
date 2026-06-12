@@ -19,6 +19,16 @@ App Router. Most pages are `async` server components.
 
 **All data** is scraped from `DOMAIN_KIRYUU` env var (default: `https://v6.kiryuu.to/`) via `axios` + `cheerio` in `src/lib/scraper.ts`. No database, no CMS API.
 
+## Cloudflare
+
+`v6.kiryuu.to` is behind Cloudflare Managed Challenge (Turnstile). The scraper will get 403 errors unless you provide a valid `cf_clearance` cookie. To fix:
+
+1. Open `https://v6.kiryuu.to/` in a regular browser, solve the Cloudflare challenge
+2. Open DevTools → Application → Cookies → copy `cf_clearance` value
+3. Set it in `.env`: `CF_COOKIE=cf_clearance=...`
+
+Without this cookie, all pages will show empty data or error states at runtime (but the build still succeeds).
+
 ## Critical quirks (will cause errors if missed)
 
 - **`params` and `searchParams` are Promises** — must be `await`ed in page components.
@@ -39,3 +49,4 @@ App Router. Most pages are `async` server components.
 | `app/api/` | API routes mirroring scraper functions |
 | `app/api/proxy/image/route.ts` | Image proxy endpoint |
 | `next.config.ts` | Image remote patterns + env vars |
+| `.env` | `DOMAIN_KIRYUU` (target) + `CF_COOKIE` (Cloudflare bypass) |

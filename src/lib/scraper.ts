@@ -9,12 +9,15 @@ import type {
   Genre,
 } from "@/src/types";
 
+const CF_COOKIE = process.env.CF_COOKIE || "";
+
 const axiosInstance = axios.create({
   timeout: 30000,
   headers: {
     "User-Agent":
       "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
     Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+    ...(CF_COOKIE ? { Cookie: CF_COOKIE } : {}),
   },
 });
 
@@ -479,32 +482,36 @@ export async function getGenreList(): Promise<Genre[]> {
   const seen = new Set<string>();
   const genres: Genre[] = [];
 
-  const homeData = await getHome(1);
-  const slugs = homeData.komik.slice(0, 20).map((k) => k.slug);
+  try {
+    const homeData = await getHome(1);
+    const slugs = homeData.komik.slice(0, 20).map((k) => k.slug);
 
-  const results = await Promise.allSettled(
-    slugs.map((slug) =>
-      axiosInstance.get(`${domain}/manga/${slug}/`).then(({ data }) => {
-        const $ = cheerio.load(data);
-        const out: Genre[] = [];
-        $('a[itemprop="genre"]').each((_, el) => {
-          const href = $(el).attr("href") || "";
-          const slug2 = href.split("/genre/")[1]?.replace(/\/$/, "") || "";
-          const name =
-            $(el).find("span.flex-1").first().text().trim() ||
-            $(el).text().trim();
-          if (slug2 && name && !seen.has(slug2)) {
-            seen.add(slug2);
-            out.push({ slug: slug2, name });
-          }
-        });
-        return out;
-      }),
-    ),
-  );
+    const results = await Promise.allSettled(
+      slugs.map((slug) =>
+        axiosInstance.get(`${domain}/manga/${slug}/`).then(({ data }) => {
+          const $ = cheerio.load(data);
+          const out: Genre[] = [];
+          $('a[itemprop="genre"]').each((_, el) => {
+            const href = $(el).attr("href") || "";
+            const slug2 = href.split("/genre/")[1]?.replace(/\/$/, "") || "";
+            const name =
+              $(el).find("span.flex-1").first().text().trim() ||
+              $(el).text().trim();
+            if (slug2 && name && !seen.has(slug2)) {
+              seen.add(slug2);
+              out.push({ slug: slug2, name });
+            }
+          });
+          return out;
+        }),
+      ),
+    );
 
-  for (const r of results) {
-    if (r.status === "fulfilled") genres.push(...r.value);
+    for (const r of results) {
+      if (r.status === "fulfilled") genres.push(...r.value);
+    }
+  } catch {
+    // Return whatever genres were collected, or empty array
   }
 
   return genres;

@@ -1,4 +1,5 @@
 import { Suspense } from 'react'
+import { connection } from 'next/server'
 import { getHome, getDetail, getPopular, getManhwa, getManga, getManhua } from '@/src/lib/scraper'
 import BannerCarousel from '@/src/components/BannerCarousel'
 import PopularScroll from '@/src/components/PopularScroll'
@@ -81,7 +82,8 @@ async function LatestSection({ searchParams }: Props) {
   )
 }
 
-export default function Home({ searchParams }: Props) {
+export default async function Home({ searchParams }: Props) {
+  await connection()
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
       <Suspense fallback={<BannerFallback />}>
