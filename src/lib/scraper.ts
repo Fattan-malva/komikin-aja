@@ -175,7 +175,7 @@ export async function getByType(
 
   let totalPages = 1;
   const pageBtns = $('button[onclick*="addSingularFilter"]').filter((_, el) => {
-    return /addSingularFilter\('page',\s*'(\d+)'/i.test(
+    return /'addSingularFilter'\]\('page',\s*'(\d+)'/i.test(
       $(el).attr("onclick") || "",
     );
   });
@@ -183,7 +183,7 @@ export async function getByType(
     .map((_, el) => {
       const m = $(el)
         .attr("onclick")
-        ?.match(/addSingularFilter\('page',\s*'(\d+)'/i);
+        ?.match(/'addSingularFilter'\]\('page',\s*'(\d+)'/i);
       return m ? parseInt(m[1]) : NaN;
     })
     .get()
@@ -554,27 +554,27 @@ export async function getGenre(
     const rating = card.find("div.numscore").first().text().trim();
     const status = card.find("p.font-normal.text-xs").last().text().trim();
 
-    if (title) {
-      komik.push({ slug, title, thumbnail, rating, status });
-    }
-  });
+      if (title) {
+        komik.push({ slug, title, thumbnail, rating, status });
+      }
+    });
 
-  let totalPages = 1;
-  const pageBtns = $('button[onclick*="addSingularFilter"]').filter((_, el) => {
-    return /addSingularFilter\('page',\s*'(\d+)'/i.test(
-      $(el).attr("onclick") || "",
-    );
-  });
-  const nums = pageBtns
-    .map((_, el) => {
-      const m = $(el)
-        .attr("onclick")
-        ?.match(/addSingularFilter\('page',\s*'(\d+)'/i);
-      return m ? parseInt(m[1]) : NaN;
-    })
-    .get()
-    .filter((n) => !isNaN(n));
-  if (nums.length > 0) totalPages = Math.max(...nums);
+    let totalPages = 1;
+    const pageBtns = $('button[onclick*="addSingularFilter"]').filter((_, el) => {
+      return /'addSingularFilter'\]\('page',\s*'(\d+)'/i.test(
+        $(el).attr("onclick") || "",
+      );
+    });
+    const nums = pageBtns
+      .map((_, el) => {
+        const m = $(el)
+          .attr("onclick")
+          ?.match(/'addSingularFilter'\]\('page',\s*'(\d+)'/i);
+        return m ? parseInt(m[1]) : NaN;
+      })
+      .get()
+      .filter((n) => !isNaN(n));
+    if (nums.length > 0) totalPages = Math.max(...nums);
 
-  return { komik, totalPages, currentPage: page };
-}
+    return { komik, totalPages, currentPage: page };
+  }

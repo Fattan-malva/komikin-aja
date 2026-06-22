@@ -28,6 +28,10 @@ export function sanitizeHtml(text: string): string {
   return text.replace(/<[^>]*>/g, '').trim()
 }
 
+export function slugify(text: string): string {
+  return text.toLowerCase().replace(/[\s/]+/g, '-').replace(/[^a-z0-9-]/g, '').replace(/-+/g, '-').replace(/^-|-$/g, '')
+}
+
 export function proxyImage(url: string): string {
   if (url.startsWith('/api/proxy/image')) return url
   return `/api/proxy/image?url=${encodeURIComponent(url)}`

@@ -2,7 +2,7 @@ import { notFound } from 'next/navigation'
 import { connection } from 'next/server'
 import { getDetail } from '@/src/lib/scraper'
 import { getDetailH } from '@/src/lib/scrapper-h'
-import { proxyImage, isHSlug, stripHPrefix } from '@/src/lib/utils'
+import { proxyImage, isHSlug, stripHPrefix, slugify } from '@/src/lib/utils'
 import GenreBadge from '@/src/components/GenreBadge'
 import ChapterList from '@/src/components/ChapterList'
 import BookmarkButton from '@/src/components/BookmarkButton'
@@ -74,7 +74,7 @@ export default async function KomikDetail({ params }: Props) {
               <h3 className="text-sm font-semibold text-gray-400 uppercase tracking-wide mb-2">Genres</h3>
               <div className="flex flex-wrap gap-2">
                 {komik.genres.map(g => (
-                  <GenreBadge key={g} name={g} slug={g.toLowerCase()} />
+                  <GenreBadge key={g} name={g} slug={slugify(g)} />
                 ))}
               </div>
             </div>

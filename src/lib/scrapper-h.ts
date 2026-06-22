@@ -105,6 +105,43 @@ export async function getDetailH(rawSlug: string): Promise<Komik | null> {
   return { slug: rawSlug, title, thumbnail, type, status, rating: $(".num").first().text().trim() || "", synopsis, genres, author, chapters };
 }
 
+export async function getGenreH(genre: string, page: number = 1): Promise<KomikListResponse> {
+  const domain = getDomainH();
+  const url = page > 1
+    ? `${domain}/genres/${genre}/page/${page}/`
+    : `${domain}/genres/${genre}/`;
+  const html = curl(url);
+  const $ = cheerio.load(html);
+
+  const komik: Komik[] = [];
+  $(".listupd .bsx").each((_, el) => {
+    const link = $(el).find("a").first();
+    const href = link.attr("href") || "";
+    const slug = href.replace(/\/+$/, "").split("/").pop() || "";
+    if (!slug) return;
+    const title = link.attr("title") || $(el).find(".tt").text().trim() || "";
+    const thumbnail = $(el).find("img").first().attr("src") || "";
+    if (title) {
+      komik.push({ slug: `h-${slug}`, title, thumbnail });
+    }
+  });
+
+  let totalPages = 1;
+  const nums = $(".pagination .page-numbers")
+    .map((_, el) => {
+      const href = $(el).attr("href") || "";
+      const m = href.match(/\/page\/(\d+)\//);
+      if (m) return parseInt(m[1]);
+      const n = parseInt($(el).text().trim());
+      return isNaN(n) ? 0 : n;
+    })
+    .get()
+    .filter((n) => n > 0);
+  if (nums.length > 0) totalPages = Math.max(...nums);
+
+  return { komik, totalPages, currentPage: page };
+}
+
 export async function getChapterImagesH(rawSlug: string, chapterSlug: string): Promise<ChapterDetail | null> {
   const domain = getDomainH();
   const html = curl(`${domain}/${chapterSlug}/`);
