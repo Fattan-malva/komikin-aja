@@ -1,6 +1,7 @@
 import Link from 'next/link'
 import type { Komik } from '@/src/types'
 import { proxyImage } from '@/src/lib/utils'
+import TypeBadge from './TypeBadge'
 
 function timeAgo(dateStr: string): string {
   if (!dateStr) return ''
@@ -43,6 +44,7 @@ export default function LatestUpdates({ items }: Props) {
                 className="w-full h-full object-cover"
                 loading="lazy"
               />
+              <TypeBadge type={k.type} />
             </div>
             <div className="flex-1 min-w-0">
               <h3 className="text-sm font-semibold text-gray-100 line-clamp-1 group-hover:text-[#a855f7] transition-colors">

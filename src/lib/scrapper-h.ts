@@ -14,23 +14,31 @@ function curl(url: string): string {
   });
 }
 
-interface WPSearchResult {
-  id: number;
-  title: string;
-  url: string;
+function parseDetailFromHtml(html: string): { thumbnail: string; type: string; status: string; rating: string } {
+  const $ = cheerio.load(html);
+  const thumbnail = $("img.wp-post-image").first().attr("src") || $(".thumb img").first().attr("src") || "";
+  let type = "", status = "";
+  $("table.infotable tbody tr").each((_, el) => {
+    const label = $(el).find("td").first().text().trim().toLowerCase();
+    const value = $(el).find("td").eq(1).text().trim();
+    if (label === "status") status = value;
+    else if (label === "type") type = value;
+  });
+  const rating = $(".num").first().text().trim();
+  return { thumbnail, type, status, rating };
 }
 
 export async function searchKomikH(
   query: string,
-  _page: number = 1,
+  page: number = 1,
   prefixSlug = true,
 ): Promise<KomikListResponse> {
   const domain = getDomainH();
 
-  let results: WPSearchResult[] = [];
+  let results: Array<{ id: number; title: string; url: string }> = [];
   try {
     const json = curl(
-      `${domain}/wp-json/wp/v2/search?search=${encodeURIComponent(query)}&per_page=20&type=post`,
+      `${domain}/wp-json/wp/v2/search?search=${encodeURIComponent(query)}&per_page=50&page=${page}&type=post`,
     );
     results = JSON.parse(json);
   } catch {
@@ -39,25 +47,27 @@ export async function searchKomikH(
   if (!Array.isArray(results)) return { komik: [] };
 
   const komik: Komik[] = [];
+  const batch = results.slice(0, 30);
 
-  for (const item of results.slice(0, 15)) {
-    const url = item.url.replace(/\/+$/, "");
-    const slug = url.split("/").pop() || "";
-    const prefixed = prefixSlug ? `h-${slug}` : slug;
-    const entry: Komik = { slug: prefixed, title: item.title, thumbnail: "" };
-    try {
-      const html = curl(item.url);
-      const $ = cheerio.load(html);
-      entry.thumbnail = $("img.wp-post-image").first().attr("src") || $(".thumb img").first().attr("src") || "";
-      $("table.infotable tbody tr").each((_, el) => {
-        const label = $(el).find("td").first().text().trim().toLowerCase();
-        const value = $(el).find("td").eq(1).text().trim();
-        if (label === "status") entry.status = value;
-        else if (label === "type") entry.type = value;
-      });
-      entry.rating = $(".num").first().text().trim();
-    } catch {}
-    komik.push(entry);
+  const BATCH_SIZE = 5;
+  for (let i = 0; i < batch.length; i += BATCH_SIZE) {
+    const slice = batch.slice(i, i + BATCH_SIZE);
+    const pages = slice.map((item) => {
+      const url = item.url.replace(/\/+$/, "");
+      const slug = url.split("/").pop() || "";
+      const prefixed = prefixSlug ? `h-${slug}` : slug;
+      const entry: Komik = { slug: prefixed, title: item.title, thumbnail: "" };
+      try {
+        const html = curl(item.url);
+        const parsed = parseDetailFromHtml(html);
+        entry.thumbnail = parsed.thumbnail;
+        entry.type = parsed.type;
+        entry.status = parsed.status;
+        entry.rating = parsed.rating;
+      } catch {}
+      return entry;
+    });
+    komik.push(...pages);
   }
 
   return { komik };

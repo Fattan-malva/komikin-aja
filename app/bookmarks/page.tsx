@@ -5,6 +5,7 @@ import Link from "next/link";
 import { getBookmarks, getHistory } from "@/src/lib/storage";
 import { Komik, BookmarkItem, HistoryItem } from "@/src/types";
 import { proxyImage } from "@/src/lib/utils";
+import TypeBadge from "@/src/components/TypeBadge";
 
 // Komponen Kartu Bookmark sederhana untuk layout horizontal 2 baris
 function BookmarkCard({ item }: { item: Komik }) {
@@ -22,6 +23,7 @@ function BookmarkCard({ item }: { item: Komik }) {
             onError={() => setImgSrc("/placeholder-comic.jpg")}
             className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
           />
+          <TypeBadge type={(item as { type?: string }).type} />
         </div>
                     <div className="p-3 h-[52px] flex items-start">
           <h3 className="text-sm font-semibold text-white line-clamp-2 group-hover:text-purple-400 transition-colors leading-tight">

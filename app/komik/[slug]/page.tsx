@@ -4,6 +4,7 @@ import { getDetail } from '@/src/lib/scraper'
 import { getDetailH } from '@/src/lib/scrapper-h'
 import { proxyImage, isHSlug, stripHPrefix, slugify } from '@/src/lib/utils'
 import GenreBadge from '@/src/components/GenreBadge'
+import TypeBadge from '@/src/components/TypeBadge'
 import ChapterList from '@/src/components/ChapterList'
 import BookmarkButton from '@/src/components/BookmarkButton'
 import HistoryTracker from '@/src/components/HistoryTracker'
@@ -25,12 +26,13 @@ export default async function KomikDetail({ params }: Props) {
   return (
     <div className="space-y-8">
       <div className="flex flex-col md:flex-row gap-6">
-        <div className="w-full md:w-64 shrink-0">
+        <div className="w-full md:w-64 shrink-0 relative">
           <img
             src={proxyImage(komik.thumbnail)}
             alt={komik.title}
             className="w-full rounded-lg shadow-lg"
           />
+          <TypeBadge type={komik.type} />
         </div>
 
         <div className="flex-1 space-y-4">
@@ -74,7 +76,7 @@ export default async function KomikDetail({ params }: Props) {
               <h3 className="text-sm font-semibold text-gray-400 uppercase tracking-wide mb-2">Genres</h3>
               <div className="flex flex-wrap gap-2">
                 {komik.genres.map(g => (
-                  <GenreBadge key={g} name={g} slug={slugify(g)} />
+                  <GenreBadge key={g} name={g} slug={slugify(g)} source={fromH ? 'h' : undefined} />
                 ))}
               </div>
             </div>

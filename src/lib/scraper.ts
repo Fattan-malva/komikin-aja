@@ -45,12 +45,15 @@ function parseKomikCards(html: string): Komik[] {
     const chapterLink = card.find("a.link-self").first();
     const chapterUrl = chapterLink.attr("href") || "";
     const date = card.find("time").first().attr("datetime") || "";
+    const rawType = card.find("span.absolute.z-1 img").first().attr("alt")?.trim() || "";
+    const type = rawType ? rawType.charAt(0).toUpperCase() + rawType.slice(1) : "";
 
     if (title) {
       komik.push({
         slug,
         title,
         thumbnail,
+        type,
         rating,
         status,
         latestChapter: chapterUrl.split("/").filter(Boolean).pop() || "",
@@ -113,9 +116,11 @@ export async function getPopular(page: number = 1): Promise<KomikListResponse> {
     const title = card.find("h1.text-\\[15px\\]").first().text().trim();
     const thumbnail = card.find("img.wp-post-image").first().attr("src") || "";
     const rating = card.find("div.numscore").first().text().trim();
+    const rawType = card.find("span.absolute.z-1 img").first().attr("alt")?.trim() || "";
+    const type = rawType ? rawType.charAt(0).toUpperCase() + rawType.slice(1) : "";
 
     if (title) {
-      komik.push({ slug, title, thumbnail, rating });
+      komik.push({ slug, title, thumbnail, type, rating });
     }
   });
 
@@ -167,9 +172,11 @@ export async function getByType(
     const thumbnail = card.find("img.wp-post-image").first().attr("src") || "";
     const rating = card.find("div.numscore").first().text().trim();
     const status = card.find("p.font-normal.text-xs").last().text().trim();
+    const rawType = card.find("span.absolute.z-1 img").first().attr("alt")?.trim() || "";
+    const itemType = rawType ? rawType.charAt(0).toUpperCase() + rawType.slice(1) : "";
 
     if (title) {
-      komik.push({ slug, title, thumbnail, rating, status });
+      komik.push({ slug, title, thumbnail, type: itemType, rating, status });
     }
   });
 
@@ -428,39 +435,66 @@ export async function getChapterImages(
 
 export async function searchKomik(
   query: string,
-  _page: number = 1,
+  page: number = 1,
 ): Promise<KomikListResponse> {
   const domain = getDomain();
   const nonce = await getSearchNonce();
 
   const params = new URLSearchParams();
-  params.append("query", query);
+  params.append("nonce", nonce);
+  params.append("search_term", query);
+  params.append("page", String(page));
+  params.append("order", "desc");
+  params.append("orderby", "popular");
 
   const { data } = await axiosInstance.post(
-    `${domain}/wp-admin/admin-ajax.php?nonce=${nonce}&action=search`,
+    `${domain}/wp-admin/admin-ajax.php?action=advanced_search`,
     params.toString(),
-    {
-      headers: {
-        "Content-Type": "application/x-www-form-urlencoded",
-        "X-Requested-With": "XMLHttpRequest",
-      },
-    },
+    { headers: { "Content-Type": "application/x-www-form-urlencoded" } },
   );
 
   const $ = cheerio.load(data);
+  const seen = new Set<string>();
   const komik: Komik[] = [];
 
-  $("#searchResults a").each((_, el) => {
-    const href = $(el).attr("href") || "";
+  $("div.group-data-\\[mode\\=horizontal\\]\\:hidden").each((_, el) => {
+    const card = $(el);
+    const link = card.find('a[color="primary"]').first();
+    const href = link.attr("href") || "";
     const slug = href.split("/manga/")[1]?.replace(/\/$/, "") || "";
-    const title = $(el).find("h3").first().text().trim();
-    const thumbnail = $(el).find("img").first().attr("src") || "";
-    if (slug && title) {
-      komik.push({ slug, title, thumbnail });
+    if (!slug || seen.has(slug)) return;
+    seen.add(slug);
+
+    const title = card.find("h1.text-\\[15px\\]").first().text().trim();
+    const thumbnail = card.find("img.wp-post-image").first().attr("src") || "";
+    const rating = card.find("div.numscore").first().text().trim();
+    const status = card.find("p.font-normal.text-xs").last().text().trim();
+    const rawType = card.find("span.absolute.z-1 img").first().attr("alt")?.trim() || "";
+    const type = rawType ? rawType.charAt(0).toUpperCase() + rawType.slice(1) : "";
+
+    if (title) {
+      komik.push({ slug, title, thumbnail, type, rating, status });
     }
   });
 
-  return { komik };
+  let totalPages = 1;
+  const pageBtns = $('button[onclick*="addSingularFilter"]').filter((_, el) => {
+    return /'addSingularFilter'\]\('page',\s*'(\d+)'/i.test(
+      $(el).attr("onclick") || "",
+    );
+  });
+  const nums = pageBtns
+    .map((_, el) => {
+      const m = $(el)
+        .attr("onclick")
+        ?.match(/'addSingularFilter'\]\('page',\s*'(\d+)'/i);
+      return m ? parseInt(m[1]) : NaN;
+    })
+    .get()
+    .filter((n) => !isNaN(n));
+  if (nums.length > 0) totalPages = Math.max(...nums);
+
+  return { komik, totalPages, currentPage: page };
 }
 
 let cachedNonce = "";
@@ -553,9 +587,11 @@ export async function getGenre(
     const thumbnail = card.find("img.wp-post-image").first().attr("src") || "";
     const rating = card.find("div.numscore").first().text().trim();
     const status = card.find("p.font-normal.text-xs").last().text().trim();
+    const rawType = card.find("span.absolute.z-1 img").first().attr("alt")?.trim() || "";
+    const type = rawType ? rawType.charAt(0).toUpperCase() + rawType.slice(1) : "";
 
       if (title) {
-        komik.push({ slug, title, thumbnail, rating, status });
+        komik.push({ slug, title, thumbnail, type, rating, status });
       }
     });
 

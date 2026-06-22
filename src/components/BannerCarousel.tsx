@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from 'react'
 import Link from 'next/link'
 import type { Komik } from '@/src/types'
 import { proxyImage } from '@/src/lib/utils'
+import TypeBadge from './TypeBadge'
 
 interface Props {
   items: Komik[]
@@ -39,6 +40,7 @@ export default function BannerCarousel({ items }: Props) {
               alt={k.title}
               className="w-full h-full object-cover"
             />
+            <TypeBadge type={k.type} />
             <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/50 to-transparent" />
             <div className="absolute inset-x-0 bottom-0 p-6 sm:p-10">
               <h2 className="text-2xl sm:text-4xl font-bold text-white mb-3 drop-shadow-lg">

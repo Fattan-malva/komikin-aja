@@ -1,6 +1,7 @@
 import Link from 'next/link'
 import type { Komik } from '@/src/types'
 import { proxyImage } from '@/src/lib/utils'
+import TypeBadge from './TypeBadge'
 
 interface Props {
   komik: Komik
@@ -17,6 +18,7 @@ export default function KomikCard({ komik }: Props) {
             className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-110"
             loading="lazy"
           />
+          <TypeBadge type={komik.type} />
           <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
         </div>
         <h3 className="text-sm font-semibold text-gray-100 line-clamp-2 leading-tight group-hover:text-[#a855f7] transition-colors">

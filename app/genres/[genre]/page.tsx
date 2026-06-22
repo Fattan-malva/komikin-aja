@@ -3,27 +3,32 @@ import { getGenre } from '@/src/lib/scraper'
 import { getGenreH } from '@/src/lib/scrapper-h'
 import KomikGrid from '@/src/components/KomikGrid'
 import Pagination from '@/src/components/Pagination'
+import type { KomikListResponse } from '@/src/types'
 
 interface Props {
   params: Promise<{ genre: string }>
-  searchParams: Promise<{ page?: string }>
+  searchParams: Promise<{ page?: string; source?: string }>
 }
 
 export default async function GenrePage({ params, searchParams }: Props) {
   await connection()
   const { genre } = await params
-  const pageNum = Number((await searchParams).page) || 1
-  let data: Awaited<ReturnType<typeof getGenre>> = { komik: [] }
+  const { page, source } = await searchParams
+  const pageNum = Number(page) || 1
 
-  try {
-    data = await getGenre(genre, pageNum)
-  } catch {
-    // data stays as default empty
-  }
+  const data: KomikListResponse = { komik: [] }
 
-  if (data.komik.length === 0) {
+  if (source === 'h') {
     try {
-      data = await getGenreH(genre, pageNum)
+      const result = await getGenreH(genre, pageNum)
+      Object.assign(data, result)
+    } catch {
+      // data stays as default empty
+    }
+  } else {
+    try {
+      const result = await getGenre(genre, pageNum)
+      Object.assign(data, result)
     } catch {
       // data stays as default empty
     }
