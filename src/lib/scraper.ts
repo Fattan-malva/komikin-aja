@@ -266,20 +266,34 @@ export async function getDetail(slug: string): Promise<Komik | null> {
       .trim();
   }
 
-  let mangaId = "";
-  const chapterListEl = $("#chapter-list");
-  const hxGet = chapterListEl.attr("hx-get");
-  if (hxGet) {
-    const params = new URLSearchParams(hxGet.split("?")[1]);
-    mangaId = params.get("manga_id") || "";
-  }
-
   let chapters: Chapter[] = [];
-  if (mangaId) {
-    try {
-      chapters = await getChapterList(mangaId);
-    } catch {
-      chapters = [];
+  const chapterListEl = $("#chapter-list");
+  chapterListEl.find('div[data-chapter-number]').each((_, el) => {
+    const chapterDiv = $(el);
+    const number = chapterDiv.attr("data-chapter-number") || "";
+    const link = chapterDiv.find("a[href*='/manga/']").first();
+    const href = link.attr("href") || "";
+    const slug = href.split("/").filter(Boolean).pop()?.replace(/\/$/, "") || "";
+    const title = chapterDiv.find("span").first().text().trim() || undefined;
+    const date = chapterDiv.find("time").first().attr("datetime") || undefined;
+
+    if (slug && number) {
+      chapters.push({ slug, number, title, date });
+    }
+  });
+
+  if (chapters.length === 0) {
+    const hxGet = chapterListEl.attr("hx-get");
+    if (hxGet) {
+      const params = new URLSearchParams(hxGet.split("?")[1]);
+      const mangaId = params.get("manga_id") || "";
+      if (mangaId) {
+        try {
+          chapters = await getChapterList(mangaId);
+        } catch {
+          chapters = [];
+        }
+      }
     }
   }
 
