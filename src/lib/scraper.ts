@@ -7,6 +7,7 @@ import type {
   ChapterDetail,
   KomikListResponse,
   Genre,
+  SearchFilters,
 } from "@/src/types";
 
 const CF_COOKIE = process.env.CF_COOKIE || "";
@@ -450,70 +451,141 @@ export async function getChapterImages(
 export async function searchKomik(
   query: string,
   page: number = 1,
+  filters?: SearchFilters,
 ): Promise<KomikListResponse> {
   const domain = getDomain();
   const nonce = await getSearchNonce();
 
-  const params = new URLSearchParams();
-  params.append("nonce", nonce);
-  params.append("search_term", query);
-  params.append("page", String(page));
-  params.append("order", "desc");
-  params.append("orderby", "relevance");
+  const advParams = new URLSearchParams({ nonce, search_term: query, page: String(page) });
+  if (filters) {
+    if (filters.order) advParams.set("order", filters.order);
+    if (filters.orderby) advParams.set("orderby", filters.orderby);
+    if (filters.genre) advParams.append("genre", filters.genre);
+    if (filters.type) advParams.append("the_type", filters.type);
+    if (filters.status) advParams.append("the_status", filters.status);
+    if (filters.author) advParams.append("the_author", filters.author);
+    if (filters.artist) advParams.append("the_artist", filters.artist);
+    if (filters.exclude) advParams.append("the_exclude", filters.exclude);
+    if (filters.project) advParams.append("project", filters.project);
+  }
+  if (!advParams.has("order")) advParams.set("order", "desc");
+  if (!advParams.has("orderby")) advParams.set("orderby", "relevance");
 
-  const { data } = await axiosInstance.post(
-    `${domain}/wp-admin/admin-ajax.php?action=advanced_search`,
-    params.toString(),
-    { headers: { "Content-Type": "application/x-www-form-urlencoded" } },
-  );
+  const [directHtml, advHtml] = await Promise.allSettled([
+    axiosInstance.post(
+      `${domain}/wp-admin/admin-ajax.php?action=search&nonce=${nonce}`,
+      new URLSearchParams({ query }).toString(),
+      { headers: { "Content-Type": "application/x-www-form-urlencoded" } },
+    ),
+    axiosInstance.post(
+      `${domain}/wp-admin/admin-ajax.php?action=advanced_search`,
+      advParams.toString(),
+      { headers: { "Content-Type": "application/x-www-form-urlencoded" } },
+    ),
+  ]);
 
-  const $ = cheerio.load(data);
-  const seen = new Set<string>();
-  const komik: Komik[] = [];
+  const allBySlug = new Map<string, Komik>();
 
-  $("div.group-data-\\[mode\\=horizontal\\]\\:hidden").each((_, el) => {
-    const card = $(el);
-    const link = card.find('a[color="primary"]').first();
-    const href = link.attr("href") || "";
-    const slug = href.split("/manga/")[1]?.replace(/\/$/, "") || "";
-    if (!slug || seen.has(slug)) return;
-    seen.add(slug);
+  // Parse advanced search results first (full details: rating, status, type)
+  if (advHtml.status === "fulfilled") {
+    const $ = cheerio.load(advHtml.value.data);
+    const seen = new Set<string>();
 
-    const title = card.find("h1.text-\\[15px\\]").first().text().trim();
-    const thumbnail = card.find("img.wp-post-image").first().attr("src") || "";
-    const rating = card.find("div.numscore").first().text().trim();
-    const status = card.find("p.font-normal.text-xs").last().text().trim();
-    const rawType = card.find("span.absolute.z-1 img").first().attr("alt")?.trim() || "";
-    const type = rawType ? rawType.charAt(0).toUpperCase() + rawType.slice(1) : "";
+    $("div.group-data-\\[mode\\=horizontal\\]\\:hidden").each((_, el) => {
+      const card = $(el);
+      const link = card.find('a[color="primary"]').first();
+      const href = link.attr("href") || "";
+      const slug = href.split("/manga/")[1]?.replace(/\/$/, "") || "";
+      if (!slug || seen.has(slug)) return;
+      seen.add(slug);
 
-    if (title) {
-      komik.push({ slug, title, thumbnail, type, rating, status });
-    }
-  });
+      const title = card.find("h1.text-\\[15px\\]").first().text().trim();
+      const thumbnail = card.find("img.wp-post-image").first().attr("src") || "";
+      const rating = card.find("div.numscore").first().text().trim();
+      const status = card.find("p.font-normal.text-xs").last().text().trim();
+      const rawType = card.find("span.absolute.z-1 img").first().attr("alt")?.trim() || "";
+      const type = rawType ? rawType.charAt(0).toUpperCase() + rawType.slice(1) : "";
 
-  komik.sort((a, b) => {
+      if (title) {
+        allBySlug.set(slug, { slug, title, thumbnail, type, rating, status });
+      }
+    });
+  }
+
+  // Parse direct search results (actual matches, may overwrite with better thumbnails)
+  const directSlugs = new Set<string>();
+  if (directHtml.status === "fulfilled") {
+    const $ = cheerio.load(directHtml.value.data);
+    $("#searchResults > a").each((_, el) => {
+      const link = $(el);
+      const href = link.attr("href") || "";
+      const slug = href.split("/manga/")[1]?.replace(/\/$/, "") || "";
+      if (!slug) return;
+
+      const title = link.find("h3").first().text().trim();
+      if (!title) return;
+      directSlugs.add(slug);
+
+      const thumbnail = link.find("img").first().attr("src") || "";
+      if (allBySlug.has(slug)) {
+        const existing = allBySlug.get(slug)!;
+        existing.thumbnail = thumbnail || existing.thumbnail;
+      } else {
+        allBySlug.set(slug, { slug, title, thumbnail });
+      }
+    });
+  }
+
+  // Build result: direct matches first (preserving order), then rest sorted by relevance
+  const direct: Komik[] = [];
+  const rest: Komik[] = [];
+
+  if (directHtml.status === "fulfilled") {
+    const $ = cheerio.load(directHtml.value.data);
+    $("#searchResults > a").each((_, el) => {
+      const link = $(el);
+      const href = link.attr("href") || "";
+      const slug = href.split("/manga/")[1]?.replace(/\/$/, "") || "";
+      if (!slug) return;
+      const title = link.find("h3").first().text().trim();
+      if (!title) return;
+      const entry = allBySlug.get(slug);
+      if (entry) direct.push(entry);
+    });
+  }
+
+  for (const k of allBySlug.values()) {
+    if (!directSlugs.has(k.slug)) rest.push(k);
+  }
+
+  rest.sort((a, b) => {
     const relA = computeRelevance(a.title, query);
     const relB = computeRelevance(b.title, query);
     if (relA !== relB) return relB - relA;
     return parseFloat(b.rating || "0") - parseFloat(a.rating || "0");
   });
 
+  const komik = [...direct, ...rest];
+
   let totalPages = 1;
-  const pageBtns = $('button[onclick*="addSingularFilter"]').filter((_, el) => {
-    return /'addSingularFilter'\]\('page',\s*'(\d+)'/i.test(
-      $(el).attr("onclick") || "",
-    );
-  });
-  const nums = pageBtns
-    .map((_, el) => {
-      const m = $(el)
-        .attr("onclick")
-        ?.match(/'addSingularFilter'\]\('page',\s*'(\d+)'/i);
-      return m ? parseInt(m[1]) : NaN;
-    })
-    .get()
-    .filter((n) => !isNaN(n));
-  if (nums.length > 0) totalPages = Math.max(...nums);
+  if (advHtml.status === "fulfilled") {
+    const $ = cheerio.load(advHtml.value.data);
+    const pageBtns = $('button[onclick*="addSingularFilter"]').filter((_, el) => {
+      return /'addSingularFilter'\]\('page',\s*'(\d+)'/i.test(
+        $(el).attr("onclick") || "",
+      );
+    });
+    const nums = pageBtns
+      .map((_, el) => {
+        const m = $(el)
+          .attr("onclick")
+          ?.match(/'addSingularFilter'\]\('page',\s*'(\d+)'/i);
+        return m ? parseInt(m[1]) : NaN;
+      })
+      .get()
+      .filter((n) => !isNaN(n));
+    if (nums.length > 0) totalPages = Math.max(...nums);
+  }
 
   return { komik, totalPages, currentPage: page };
 }

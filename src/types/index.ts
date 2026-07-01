@@ -46,6 +46,18 @@ export interface SearchParams {
   genre?: string
 }
 
+export interface SearchFilters {
+  genre?: string
+  type?: string
+  status?: string
+  author?: string
+  artist?: string
+  exclude?: string
+  project?: string
+  order?: string
+  orderby?: string
+}
+
 export interface HistoryItem {
   slug: string
   title: string

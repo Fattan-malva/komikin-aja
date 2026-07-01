@@ -4,17 +4,24 @@ import { searchKomikH } from '@/src/lib/scrapper-h'
 import { computeRelevance } from '@/src/lib/utils'
 import KomikGrid from '@/src/components/KomikGrid'
 import SearchBar from '@/src/components/SearchBar'
+import SearchFilters from '@/src/components/SearchFilters'
 import Pagination from '@/src/components/Pagination'
+import type { SearchFilters as SearchFiltersType } from '@/src/types'
 
 interface Props {
-  searchParams: Promise<{ q?: string; page?: string }>
+  searchParams: Promise<Record<string, string | undefined>>
 }
 
 export default async function SearchPage({ searchParams }: Props) {
   await connection()
-  const { q, page: pageStr } = await searchParams
-  const query = q || ''
-  const page = Number(pageStr) || 1
+  const sp = await searchParams
+  const query = sp.q || ''
+  const page = Number(sp.page) || 1
+
+  const filters: SearchFiltersType = {}
+  for (const key of ['genre', 'type', 'status', 'author', 'artist', 'exclude', 'project', 'order', 'orderby'] as const) {
+    if (sp[key]) (filters as Record<string, string>)[key] = sp[key]!
+  }
 
   let allKomik: Awaited<ReturnType<typeof searchKomik>>['komik'] = []
   let totalPages = 1
@@ -27,7 +34,7 @@ export default async function SearchPage({ searchParams }: Props) {
       allKomik = h.komik
     } else {
       const [regular, h] = await Promise.allSettled([
-        searchKomik(query, page),
+        searchKomik(query, page, filters),
         searchKomikH(query, page),
       ])
 
@@ -60,6 +67,7 @@ export default async function SearchPage({ searchParams }: Props) {
       <div className="max-w-md mx-auto">
         <SearchBar />
       </div>
+      <SearchFilters filters={filters} query={query} />
       {query && (
         <div className="flex items-center justify-between">
           <h1 className="text-xl font-bold text-white">
