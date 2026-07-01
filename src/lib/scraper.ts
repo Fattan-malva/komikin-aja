@@ -484,9 +484,9 @@ export async function searchKomik(
     ),
   ]);
 
-  const allBySlug = new Map<string, Komik>();
+  const detailsBySlug = new Map<string, Komik>();
 
-  // Parse advanced search results first (full details: rating, status, type)
+  // Parse advanced search results for details (rating, status, type)
   if (advHtml.status === "fulfilled") {
     const $ = cheerio.load(advHtml.value.data);
     const seen = new Set<string>();
@@ -507,13 +507,13 @@ export async function searchKomik(
       const type = rawType ? rawType.charAt(0).toUpperCase() + rawType.slice(1) : "";
 
       if (title) {
-        allBySlug.set(slug, { slug, title, thumbnail, type, rating, status });
+        detailsBySlug.set(slug, { slug, title, thumbnail, type, rating, status });
       }
     });
   }
 
-  // Parse direct search results (actual matches, may overwrite with better thumbnails)
-  const directSlugs = new Set<string>();
+  // Parse direct search results (actual matches from action=search)
+  const direct: Komik[] = [];
   if (directHtml.status === "fulfilled") {
     const $ = cheerio.load(directHtml.value.data);
     $("#searchResults > a").each((_, el) => {
@@ -524,48 +524,27 @@ export async function searchKomik(
 
       const title = link.find("h3").first().text().trim();
       if (!title) return;
-      directSlugs.add(slug);
 
       const thumbnail = link.find("img").first().attr("src") || "";
-      if (allBySlug.has(slug)) {
-        const existing = allBySlug.get(slug)!;
-        existing.thumbnail = thumbnail || existing.thumbnail;
-      } else {
-        allBySlug.set(slug, { slug, title, thumbnail });
-      }
+      const details = detailsBySlug.get(slug);
+      direct.push({
+        slug,
+        title,
+        thumbnail: thumbnail || details?.thumbnail || "",
+        type: details?.type,
+        rating: details?.rating,
+        status: details?.status,
+      });
     });
   }
 
-  // Build result: direct matches first (preserving order), then rest sorted by relevance
-  const direct: Komik[] = [];
-  const rest: Komik[] = [];
-
-  if (directHtml.status === "fulfilled") {
-    const $ = cheerio.load(directHtml.value.data);
-    $("#searchResults > a").each((_, el) => {
-      const link = $(el);
-      const href = link.attr("href") || "";
-      const slug = href.split("/manga/")[1]?.replace(/\/$/, "") || "";
-      if (!slug) return;
-      const title = link.find("h3").first().text().trim();
-      if (!title) return;
-      const entry = allBySlug.get(slug);
-      if (entry) direct.push(entry);
-    });
-  }
-
-  for (const k of allBySlug.values()) {
-    if (!directSlugs.has(k.slug)) rest.push(k);
-  }
-
-  rest.sort((a, b) => {
+  // Sort direct results by relevance
+  direct.sort((a, b) => {
     const relA = computeRelevance(a.title, query);
     const relB = computeRelevance(b.title, query);
     if (relA !== relB) return relB - relA;
     return parseFloat(b.rating || "0") - parseFloat(a.rating || "0");
   });
-
-  const komik = [...direct, ...rest];
 
   let totalPages = 1;
   if (advHtml.status === "fulfilled") {
@@ -587,7 +566,7 @@ export async function searchKomik(
     if (nums.length > 0) totalPages = Math.max(...nums);
   }
 
-  return { komik, totalPages, currentPage: page };
+  return { komik: direct, totalPages, currentPage: page };
 }
 
 let cachedNonce = "";
