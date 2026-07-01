@@ -1,6 +1,7 @@
 import { connection } from 'next/server'
 import { searchKomik } from '@/src/lib/scraper'
 import { searchKomikH } from '@/src/lib/scrapper-h'
+import { computeRelevance } from '@/src/lib/utils'
 import KomikGrid from '@/src/components/KomikGrid'
 import SearchBar from '@/src/components/SearchBar'
 import Pagination from '@/src/components/Pagination'
@@ -19,15 +20,39 @@ export default async function SearchPage({ searchParams }: Props) {
   let totalPages = 1
 
   if (query) {
-    if (query.startsWith('h-')) {
-      const res = await searchKomikH(query.slice(2), page)
-      allKomik = res.komik
-      if (res.totalPages) totalPages = res.totalPages
+    const isHOnly = query.startsWith('h-')
+
+    if (isHOnly) {
+      const h = await searchKomikH(query.slice(2), page)
+      allKomik = h.komik
     } else {
-      const res = await searchKomik(query, page)
-      allKomik = res.komik
-      if (res.totalPages) totalPages = res.totalPages
+      const [regular, h] = await Promise.allSettled([
+        searchKomik(query, page),
+        searchKomikH(query, page),
+      ])
+
+      if (regular.status === 'fulfilled') {
+        allKomik = regular.value.komik
+        if (regular.value.totalPages) totalPages = regular.value.totalPages
+      }
+
+      if (h.status === 'fulfilled' && h.value.komik.length > 0) {
+        const hSlugs = new Set(allKomik.map(k => k.slug))
+        for (const k of h.value.komik) {
+          if (!hSlugs.has(k.slug)) {
+            allKomik.push(k)
+            hSlugs.add(k.slug)
+          }
+        }
+      }
     }
+
+    allKomik.sort((a, b) => {
+      const relA = computeRelevance(a.title, isHOnly ? query.slice(2) : query)
+      const relB = computeRelevance(b.title, isHOnly ? query.slice(2) : query)
+      if (relA !== relB) return relB - relA
+      return parseFloat(b.rating || '0') - parseFloat(a.rating || '0')
+    })
   }
 
   return (

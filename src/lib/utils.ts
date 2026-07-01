@@ -36,3 +36,31 @@ export function proxyImage(url: string): string {
   if (url.startsWith('/api/proxy/image')) return url
   return `/api/proxy/image?url=${encodeURIComponent(url)}`
 }
+
+export function computeRelevance(title: string, query: string): number {
+  const t = title.toLowerCase().trim()
+  const q = query.toLowerCase().trim()
+  if (!q) return 0
+
+  if (t === q) return 100
+  if (t.startsWith(q)) return 90
+  if (t.includes(q)) return 80
+
+  const queryWords = q.split(/\s+/).filter(Boolean)
+  const titleWords = t.split(/\s+/).filter(Boolean)
+
+  const matchedWords = queryWords.filter(qw =>
+    titleWords.some(tw => tw.includes(qw) || qw.includes(tw))
+  )
+
+  if (matchedWords.length === queryWords.length && queryWords.length > 0) return 70
+  if (matchedWords.length > 0) return 40 + matchedWords.length * 5
+
+  for (const qw of queryWords) {
+    for (const tw of titleWords) {
+      if (tw.substring(0, qw.length) === qw || qw.substring(0, tw.length) === tw) return 15
+    }
+  }
+
+  return 0
+}

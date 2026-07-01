@@ -1,6 +1,6 @@
 import axios from "axios";
 import * as cheerio from "cheerio";
-import { getDomain } from "./utils";
+import { getDomain, computeRelevance } from "./utils";
 import type {
   Komik,
   Chapter,
@@ -459,7 +459,7 @@ export async function searchKomik(
   params.append("search_term", query);
   params.append("page", String(page));
   params.append("order", "desc");
-  params.append("orderby", "popular");
+  params.append("orderby", "relevance");
 
   const { data } = await axiosInstance.post(
     `${domain}/wp-admin/admin-ajax.php?action=advanced_search`,
@@ -489,6 +489,13 @@ export async function searchKomik(
     if (title) {
       komik.push({ slug, title, thumbnail, type, rating, status });
     }
+  });
+
+  komik.sort((a, b) => {
+    const relA = computeRelevance(a.title, query);
+    const relB = computeRelevance(b.title, query);
+    if (relA !== relB) return relB - relA;
+    return parseFloat(b.rating || "0") - parseFloat(a.rating || "0");
   });
 
   let totalPages = 1;
