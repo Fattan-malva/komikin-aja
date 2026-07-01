@@ -29,35 +29,38 @@ export default async function SearchPage({ searchParams }: Props) {
 
   if (query) {
     const isHOnly = query.startsWith('h-')
+    const searchQuery = isHOnly ? query.slice(2) : query
 
-    if (isHOnly) {
-      const h = await searchKomikH(query.slice(2), page)
-      results = h.komik
-    } else {
-      const [regular, h] = await Promise.allSettled([
-        searchKomik(query, page, filters),
-        searchKomikH(query, page),
-      ])
+    const [regular, h] = await Promise.allSettled([
+      searchKomik(isHOnly ? query.slice(2) : query, page, isHOnly ? undefined : filters),
+      searchKomikH(query.slice(2), page),
+    ])
 
-      if (regular.status === 'fulfilled') {
-        results = regular.value.komik
-        if (regular.value.totalPages) totalPages = regular.value.totalPages
-      }
+    if (!isHOnly && regular.status === 'fulfilled') {
+      results = regular.value.komik
+      if (regular.value.totalPages) totalPages = regular.value.totalPages
+    }
 
-      if (h.status === 'fulfilled' && h.value.komik.length > 0) {
-        const hSlugs = new Set(results.map(k => k.slug))
-        for (const k of h.value.komik) {
-          if (!hSlugs.has(k.slug)) {
-            moreLike.push(k)
-            hSlugs.add(k.slug)
-          }
+    if (isHOnly && h.status === 'fulfilled') {
+      results = h.value.komik
+    }
+
+    // More Like: from the opposite source, deduplicated
+    const resultSlugs = new Set(results.map(k => k.slug))
+    const moreSource = isHOnly ? regular : h
+
+    if (moreSource.status === 'fulfilled' && moreSource.value.komik.length > 0) {
+      for (const k of moreSource.value.komik) {
+        if (!resultSlugs.has(k.slug)) {
+          moreLike.push(k)
+          resultSlugs.add(k.slug)
         }
       }
     }
 
     moreLike.sort((a, b) => {
-      const relA = computeRelevance(a.title, query)
-      const relB = computeRelevance(b.title, query)
+      const relA = computeRelevance(a.title, searchQuery)
+      const relB = computeRelevance(b.title, searchQuery)
       if (relA !== relB) return relB - relA
       return parseFloat(b.rating || '0') - parseFloat(a.rating || '0')
     })
@@ -69,7 +72,7 @@ export default async function SearchPage({ searchParams }: Props) {
   return (
     <div className="space-y-8">
       <div className="max-w-md mx-auto">
-        <SearchBar />
+        <SearchBar initialQuery={query} />
       </div>
       <SearchFilters filters={filters} query={query} />
       {query && showResults && (
