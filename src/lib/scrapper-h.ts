@@ -27,11 +27,31 @@ function tryDomains<T>(fn: (domain: string) => T, fallbackValue: T): T {
   return fallbackValue;
 }
 
-function parseDetailFromHtml(html: string): { thumbnail: string; type: string; status: string; rating: string; author: string } {
+function extractSlug(url: string): string {
+  return url.replace(/\/+$/, "").split("/").pop() || "";
+}
+
+function parseBsxList(html: string): Komik[] {
+  const $ = cheerio.load(html);
+  const komik: Komik[] = [];
+  $(".listupd .bsx").each((_, el) => {
+    const link = $(el).find("a").first();
+    const href = link.attr("href") || "";
+    const slug = extractSlug(href);
+    if (!slug) return;
+    const title = link.attr("title") || $(el).find(".tt").text().trim() || "";
+    const thumbnail = $(el).find("img").first().attr("src") || "";
+    if (title) {
+      komik.push({ slug: `h-${slug}`, title, thumbnail });
+    }
+  });
+  return komik;
+}
+
+function parseDetailFromHtml(html: string) {
   const $ = cheerio.load(html);
   const thumbnail = $("img.wp-post-image").first().attr("src") || $(".thumb img").first().attr("src") || "";
   let type = "", status = "", author = "";
-  // MangaReader theme: table.infotable (komikremaja.art)
   $("table.infotable tr").each((_, el) => {
     const label = $(el).find("td").first().text().trim().toLowerCase();
     const value = $(el).find("td").eq(1).text().trim();
@@ -39,7 +59,6 @@ function parseDetailFromHtml(html: string): { thumbnail: string; type: string; s
     else if (label === "type") type = value;
     else if (label === "author") author = value;
   });
-  // Fallback: .imptdt (komiklab.org)
   if (!status || !type) {
     $(".imptdt").each((_, el) => {
       const label = $(el).contents().first().text().trim().toLowerCase();
@@ -49,8 +68,19 @@ function parseDetailFromHtml(html: string): { thumbnail: string; type: string; s
       else if (!author && label === "author") author = value;
     });
   }
-  const rating = $(".num").first().text().trim();
-  return { thumbnail, type, status, rating, author };
+  return { thumbnail, type, status, rating: $(".num").first().text().trim(), author };
+}
+
+function fetchThumbnailForSlug(domain: string, slug: string): string {
+  try {
+    for (const prefix of ["/komik/", "/manga/"]) {
+      const html = curl(`${domain}${prefix}${slug}/`);
+      const $ = cheerio.load(html);
+      const thumb = $("img.wp-post-image").first().attr("src") || $(".thumb img").first().attr("src") || "";
+      if (thumb) return thumb;
+    }
+  } catch {}
+  return "";
 }
 
 export async function searchKomikH(
@@ -59,95 +89,118 @@ export async function searchKomikH(
   prefixSlug = true,
 ): Promise<KomikListResponse> {
   return tryDomains((domain) => {
-    let results: Array<{ id: number; title: string; url: string }> = [];
+    const komik: Komik[] = [];
+
+    // 1. Try HTML search page with cookie (Cloudflare bypass)
+    try {
+      const searchUrl = page > 1
+        ? `${domain}/page/${page}/?s=${encodeURIComponent(query)}`
+        : `${domain}/?s=${encodeURIComponent(query)}`;
+      const html = curl(searchUrl);
+      const fromHtml = parseBsxList(html);
+      if (fromHtml.length > 0) {
+        for (const item of fromHtml) {
+          komik.push({
+            slug: prefixSlug ? item.slug : item.slug.replace(/^h-/, ""),
+            title: item.title,
+            thumbnail: item.thumbnail,
+          });
+        }
+        return { komik };
+      }
+    } catch {}
+
+    // 2. Fallback: WP REST API — return title+slug instantly, skip thumbnails
     try {
       const json = curl(
-        `${domain}/wp-json/wp/v2/search?search=${encodeURIComponent(query)}&per_page=50&page=${page}&type=post`,
+        `${domain}/wp-json/wp/v2/search?search=${encodeURIComponent(query)}&per_page=30&page=${page}&type=post`,
       );
-      results = JSON.parse(json);
-    } catch {
-      return { komik: [] };
-    }
-    if (!Array.isArray(results)) return { komik: [] };
-
-    const komik: Komik[] = [];
-    const batch = results.slice(0, 30);
-
-    const BATCH_SIZE = 5;
-    for (let i = 0; i < batch.length; i += BATCH_SIZE) {
-      const slice = batch.slice(i, i + BATCH_SIZE);
-      const pages = slice.map((item) => {
-        const url = item.url.replace(/\/+$/, "");
-        const slug = url.split("/").pop() || "";
-        const prefixed = prefixSlug ? `h-${slug}` : slug;
-        const entry: Komik = { slug: prefixed, title: item.title, thumbnail: "" };
-        try {
-          const html = curl(item.url);
-          const parsed = parseDetailFromHtml(html);
-          entry.thumbnail = parsed.thumbnail;
-          entry.type = parsed.type;
-          entry.status = parsed.status;
-          entry.rating = parsed.rating;
-        } catch {}
-        return entry;
-      });
-      komik.push(...pages);
-    }
+      const results: Array<{ id: number; title: string; url: string }> = JSON.parse(json);
+      if (Array.isArray(results)) {
+        for (const item of results) {
+          const slug = extractSlug(item.url);
+          if (slug) {
+            komik.push({
+              slug: prefixSlug ? `h-${slug}` : slug,
+              title: item.title,
+              thumbnail: "",
+            });
+          }
+        }
+      }
+    } catch {}
 
     return { komik };
   }, { komik: [] });
 }
 
-export async function getDetailH(rawSlug: string): Promise<Komik | null> {
+export async function searchKomikHWithThumbnail(
+  query: string,
+  page: number = 1,
+  prefixSlug = true,
+): Promise<KomikListResponse> {
+  const base = await searchKomikH(query, page, false);
+  if (base.komik.length === 0) return base;
+
   return tryDomains((domain) => {
-    const html = curl(`${domain}/komik/${rawSlug}/`);
-    const $ = cheerio.load(html);
-
-    const title = $("h1.entry-title").first().text().trim();
-    if (!title) return null;
-
-    const thumbnail = $("img.wp-post-image").first().attr("src") || $(".thumb img").first().attr("src") || "";
-    const synopsis = $('.entry-content-single, div[itemprop="description"]').first().text().trim();
-    let type = "", status = "", author = "";
-
-    // MangaReader theme: table.infotable (komikremaja.art)
-    $("table.infotable tr").each((_, el) => {
-      const label = $(el).find("td").first().text().trim().toLowerCase();
-      const value = $(el).find("td").eq(1).text().trim();
-      if (label === "status") status = value;
-      else if (label === "type") type = value;
-      else if (label === "author") author = value;
-    });
-    // Fallback: .imptdt (komiklab.org)
-    if (!status || !type) {
-      $(".imptdt").each((_, el) => {
-        const label = $(el).contents().first().text().trim().toLowerCase();
-        const value = $(el).find("i, a, span").first().text().trim();
-        if (!status && label === "status") status = value;
-        else if (!type && label === "type") type = value;
-        else if (!author && label === "author") author = value;
+    // Fetch thumbnails in parallel batches of 5
+    const BATCH_SIZE = 5;
+    for (let i = 0; i < base.komik.length; i += BATCH_SIZE) {
+      const batch = base.komik.slice(i, i + BATCH_SIZE);
+      batch.forEach((item) => {
+        if (!item.thumbnail) {
+          const rawSlug = item.slug.replace(/^h-/, "");
+          item.thumbnail = fetchThumbnailForSlug(domain, rawSlug);
+        }
+        if (prefixSlug && !item.slug.startsWith("h-")) {
+          item.slug = `h-${item.slug}`;
+        }
       });
     }
+    return base;
+  }, base);
+}
 
-    const genres: string[] = [];
-    $(".wd-full .mgen a, a[rel='tag']").each((_, el) => {
-      const genre = $(el).text().trim();
-      if (genre && !genres.includes(genre)) genres.push(genre);
-    });
+export async function getDetailH(rawSlug: string): Promise<Komik | null> {
+  return tryDomains((domain) => {
+    for (const prefix of ["/komik/", "/manga/"]) {
+      try {
+        const html = curl(`${domain}${prefix}${rawSlug}/`);
+        const $ = cheerio.load(html);
+        const title = $("h1.entry-title").first().text().trim();
+        if (!title) continue;
 
-    const chapters: Chapter[] = [];
-    $(".eplister#chapterlist li").each((_, el) => {
-      const link = $(el).find("a").first();
-      const chapterHref = link.attr("href") || "";
-      const chapterSlug = chapterHref.replace(/\/+$/, "").split("/").pop() || "";
-      const chapterText = $(el).find(".chapternum").first().text().trim();
-      const chapterDate = $(el).find(".chapterdate").first().text().trim();
-      if (chapterSlug) {
-        chapters.push({ slug: chapterSlug, number: chapterText, title: chapterText || undefined, date: chapterDate || undefined });
-      }
-    });
+        const parsed = parseDetailFromHtml(html);
+        const synopsis = $('.entry-content-single, div[itemprop="description"]').first().text().trim();
 
-    return { slug: rawSlug, title, thumbnail, type, status, rating: $(".num").first().text().trim() || "", synopsis, genres, author, chapters };
+        const genres: string[] = [];
+        $(".wd-full .mgen a, a[rel='tag']").each((_, el) => {
+          const genre = $(el).text().trim();
+          if (genre && !genres.includes(genre)) genres.push(genre);
+        });
+
+        const chapters: Chapter[] = [];
+        $(".eplister#chapterlist li").each((_, el) => {
+          const link = $(el).find("a").first();
+          const chapterHref = link.attr("href") || "";
+          const chapterSlug = extractSlug(chapterHref);
+          const chapterText = $(el).find(".chapternum").first().text().trim();
+          const chapterDate = $(el).find(".chapterdate").first().text().trim();
+          if (chapterSlug) {
+            chapters.push({ slug: chapterSlug, number: chapterText, title: chapterText || undefined, date: chapterDate || undefined });
+          }
+        });
+
+        return {
+          slug: rawSlug, title,
+          thumbnail: parsed.thumbnail,
+          type: parsed.type, status: parsed.status,
+          rating: parsed.rating || "",
+          synopsis, genres, author: parsed.author, chapters,
+        };
+      } catch {}
+    }
+    return null;
   }, null);
 }
 
@@ -157,21 +210,9 @@ export async function getGenreH(genre: string, page: number = 1): Promise<KomikL
       ? `${domain}/genres/${genre}/page/${page}/`
       : `${domain}/genres/${genre}/`;
     const html = curl(url);
+    const komik = parseBsxList(html);
+
     const $ = cheerio.load(html);
-
-    const komik: Komik[] = [];
-    $(".listupd .bsx").each((_, el) => {
-      const link = $(el).find("a").first();
-      const href = link.attr("href") || "";
-      const slug = href.replace(/\/+$/, "").split("/").pop() || "";
-      if (!slug) return;
-      const title = link.attr("title") || $(el).find(".tt").text().trim() || "";
-      const thumbnail = $(el).find("img").first().attr("src") || "";
-      if (title) {
-        komik.push({ slug: `h-${slug}`, title, thumbnail });
-      }
-    });
-
     let totalPages = 1;
     const nums = $(".pagination .page-numbers")
       .map((_, el) => {
@@ -182,7 +223,7 @@ export async function getGenreH(genre: string, page: number = 1): Promise<KomikL
         return isNaN(n) ? 0 : n;
       })
       .get()
-      .filter((n) => n > 0);
+      .filter((n: number) => n > 0);
     if (nums.length > 0) totalPages = Math.max(...nums);
 
     return { komik, totalPages, currentPage: page };
@@ -190,8 +231,6 @@ export async function getGenreH(genre: string, page: number = 1): Promise<KomikL
 }
 
 export async function getChapterImagesH(rawSlug: string, chapterSlug: string): Promise<ChapterDetail | null> {
-  let lastError: unknown;
-
   const domains = getDomainsH();
   for (const domain of domains) {
     try {
@@ -212,8 +251,8 @@ export async function getChapterImagesH(rawSlug: string, chapterSlug: string): P
 
       const prevUrl = (data.prevUrl as string) || "";
       const nextUrl = (data.nextUrl as string) || "";
-      const prev = prevUrl ? prevUrl.replace(/\/+$/, "").split("/").pop() || "" : "";
-      const next = nextUrl ? nextUrl.replace(/\/+$/, "").split("/").pop() || "" : "";
+      const prev = prevUrl ? extractSlug(prevUrl) : "";
+      const next = nextUrl ? extractSlug(nextUrl) : "";
 
       let chapters: Chapter[] = [];
       try {
@@ -222,9 +261,7 @@ export async function getChapterImagesH(rawSlug: string, chapterSlug: string): P
       } catch {}
 
       return { images, prev, next, chapters };
-    } catch (e) {
-      lastError = e;
-    }
+    } catch {}
   }
 
   return null;
