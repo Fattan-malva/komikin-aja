@@ -7,11 +7,11 @@ const CF_COOKIE_H = process.env.CF_COOKIE_H || "";
 const UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36";
 const CURL_OPTS = `-s --compressed -H 'User-Agent: ${UA}' -H 'Accept: application/json, text/html, */*'${CF_COOKIE_H ? ` -H 'Cookie: ${CF_COOKIE_H}'` : ""}`;
 
-function curl(url: string): string {
+function curl(url: string, timeoutMs = 30000): string {
   return execSync(`curl ${CURL_OPTS} ${JSON.stringify(url)}`, {
-    timeout: 15000,
+    timeout: timeoutMs,
     encoding: "utf-8",
-    maxBuffer: 5 * 1024 * 1024,
+    maxBuffer: 10 * 1024 * 1024,
   });
 }
 
