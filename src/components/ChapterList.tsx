@@ -7,10 +7,13 @@ import { useEffect, useState } from 'react'
 
 interface Props {
   slug: string
+  chapters?: Chapter[]
 }
 
-export default function ChapterList({ slug }: Props) {
-  const [chapters, setChapters] = useState<Chapter[] | null>(null)
+export default function ChapterList({ slug, chapters: initialChapters }: Props) {
+  const [chapters, setChapters] = useState<Chapter[] | null>(
+    initialChapters ? initialChapters.sort((a, b) => parseFloat(b.number || '0') - parseFloat(a.number || '0')) : null,
+  )
   const [readChapters, setReadChapters] = useState<Set<string>>(new Set())
 
   useEffect(() => {
@@ -18,9 +21,10 @@ export default function ChapterList({ slug }: Props) {
   }, [])
 
   useEffect(() => {
+    if (chapters !== null) return
     fetch(`/api/komik/${slug}?_=${Date.now()}`, { cache: 'no-store' })
-      .then(res => res.json())
-      .then(data => {
+      .then((res) => res.json())
+      .then((data) => {
         if (data?.chapters) {
           const sorted = (data.chapters as Chapter[]).sort(
             (a, b) => parseFloat(b.number || '0') - parseFloat(a.number || '0'),
@@ -29,7 +33,7 @@ export default function ChapterList({ slug }: Props) {
         }
       })
       .catch(() => {})
-  }, [slug])
+  }, [slug, chapters])
 
   const handleChapterClick = (chapterSlug: string) => {
     addReadChapter(chapterSlug)

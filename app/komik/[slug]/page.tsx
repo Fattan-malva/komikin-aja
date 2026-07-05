@@ -88,7 +88,7 @@ export default async function KomikDetail({ params }: Props) {
         <h2 className="text-xl font-bold text-white mb-4">
           Chapters ({komik.chapters?.length || 0})
         </h2>
-        <ChapterList slug={slug} />
+        <ChapterList slug={slug} chapters={komik.chapters} />
       </div>
     </div>
   )
