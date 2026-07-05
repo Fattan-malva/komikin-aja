@@ -19,6 +19,31 @@ const nextConfig: NextConfig = {
         protocol: "https",
         hostname: "blogger.googleusercontent.com",
       },
+      {
+        protocol: "https",
+        hostname: "komiklab.org",
+      },
+      {
+        protocol: "https",
+        hostname: "*.komiklab.org",
+      },
+      {
+        protocol: "http",
+        hostname: "cdnasu.xyz",
+      },
+      {
+        protocol: "https",
+        hostname: "cdnasu.xyz",
+      },
+      {
+        protocol: "http",
+        hostname: "*.cdnasu.xyz",
+      },
+      {
+        protocol: "https",
+        hostname: "*.cdnasu.xyz",
+      },
+
     ],
   },
   env: {

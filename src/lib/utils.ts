@@ -5,9 +5,13 @@ export function getDomain(): string {
 }
 
 export function getDomainH(): string {
-  const domain = process.env.DOMAIN_KOMIK_H || process.env['DOMAIN_KOMIK_H']
-  if (!domain) throw new Error('DOMAIN_KOMIK_H tidak ditemukan di .env')
-  return domain.replace(/\/+$/, '')
+  return getDomainsH()[0]
+}
+
+export function getDomainsH(): string[] {
+  const raw = process.env.DOMAIN_KOMIK_H || process.env['DOMAIN_KOMIK_H']
+  if (!raw) throw new Error('DOMAIN_KOMIK_H tidak ditemukan di .env')
+  return raw.split(',').map(d => d.trim().replace(/\/+$/, '')).filter(Boolean)
 }
 
 export function isHSlug(slug: string): boolean {
