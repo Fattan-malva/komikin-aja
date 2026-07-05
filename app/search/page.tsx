@@ -32,8 +32,8 @@ export default async function SearchPage({ searchParams }: Props) {
     const searchQuery = isHOnly ? query.slice(2) : query
 
     const [regular, h] = await Promise.allSettled([
-      searchKomik(isHOnly ? query.slice(2) : query, page, isHOnly ? undefined : filters),
-      searchKomikH(query.slice(2), page),
+      searchKomik(searchQuery, page, isHOnly ? undefined : filters),
+      searchKomikH(searchQuery, page),
     ])
 
     if (!isHOnly && regular.status === 'fulfilled') {
@@ -42,6 +42,11 @@ export default async function SearchPage({ searchParams }: Props) {
     }
 
     if (isHOnly && h.status === 'fulfilled') {
+      results = h.value.komik
+    }
+
+    // If regular search is empty but H has results, show H results
+    if (!isHOnly && results.length === 0 && h.status === 'fulfilled') {
       results = h.value.komik
     }
 
