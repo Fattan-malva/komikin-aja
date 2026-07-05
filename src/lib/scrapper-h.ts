@@ -3,8 +3,9 @@ import * as cheerio from "cheerio";
 import { getDomainsH } from "./utils";
 import type { Komik, Chapter, ChapterDetail, KomikListResponse } from "@/src/types";
 
+const CF_COOKIE_H = process.env.CF_COOKIE_H || "";
 const UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36";
-const CURL_OPTS = `-s --compressed -H 'User-Agent: ${UA}' -H 'Accept: application/json, text/html, */*'`;
+const CURL_OPTS = `-s --compressed -H 'User-Agent: ${UA}' -H 'Accept: application/json, text/html, */*'${CF_COOKIE_H ? ` -H 'Cookie: ${CF_COOKIE_H}'` : ""}`;
 
 function curl(url: string): string {
   return execSync(`curl ${CURL_OPTS} ${JSON.stringify(url)}`, {
@@ -30,13 +31,24 @@ function parseDetailFromHtml(html: string): { thumbnail: string; type: string; s
   const $ = cheerio.load(html);
   const thumbnail = $("img.wp-post-image").first().attr("src") || $(".thumb img").first().attr("src") || "";
   let type = "", status = "", author = "";
-  $(".imptdt").each((_, el) => {
-    const label = $(el).contents().first().text().trim().toLowerCase();
-    const value = $(el).find("i, a, span").first().text().trim();
+  // MangaReader theme: table.infotable (komikremaja.art)
+  $("table.infotable tr").each((_, el) => {
+    const label = $(el).find("td").first().text().trim().toLowerCase();
+    const value = $(el).find("td").eq(1).text().trim();
     if (label === "status") status = value;
     else if (label === "type") type = value;
     else if (label === "author") author = value;
   });
+  // Fallback: .imptdt (komiklab.org)
+  if (!status || !type) {
+    $(".imptdt").each((_, el) => {
+      const label = $(el).contents().first().text().trim().toLowerCase();
+      const value = $(el).find("i, a, span").first().text().trim();
+      if (!status && label === "status") status = value;
+      else if (!type && label === "type") type = value;
+      else if (!author && label === "author") author = value;
+    });
+  }
   const rating = $(".num").first().text().trim();
   return { thumbnail, type, status, rating, author };
 }
@@ -88,7 +100,7 @@ export async function searchKomikH(
 
 export async function getDetailH(rawSlug: string): Promise<Komik | null> {
   return tryDomains((domain) => {
-    const html = curl(`${domain}/manga/${rawSlug}/`);
+    const html = curl(`${domain}/komik/${rawSlug}/`);
     const $ = cheerio.load(html);
 
     const title = $("h1.entry-title").first().text().trim();
@@ -98,13 +110,24 @@ export async function getDetailH(rawSlug: string): Promise<Komik | null> {
     const synopsis = $('.entry-content-single, div[itemprop="description"]').first().text().trim();
     let type = "", status = "", author = "";
 
-    $(".imptdt").each((_, el) => {
-      const label = $(el).contents().first().text().trim().toLowerCase();
-      const value = $(el).find("i, a, span").first().text().trim();
+    // MangaReader theme: table.infotable (komikremaja.art)
+    $("table.infotable tr").each((_, el) => {
+      const label = $(el).find("td").first().text().trim().toLowerCase();
+      const value = $(el).find("td").eq(1).text().trim();
       if (label === "status") status = value;
       else if (label === "type") type = value;
       else if (label === "author") author = value;
     });
+    // Fallback: .imptdt (komiklab.org)
+    if (!status || !type) {
+      $(".imptdt").each((_, el) => {
+        const label = $(el).contents().first().text().trim().toLowerCase();
+        const value = $(el).find("i, a, span").first().text().trim();
+        if (!status && label === "status") status = value;
+        else if (!type && label === "type") type = value;
+        else if (!author && label === "author") author = value;
+      });
+    }
 
     const genres: string[] = [];
     $(".wd-full .mgen a, a[rel='tag']").each((_, el) => {

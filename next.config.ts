@@ -21,27 +21,39 @@ const nextConfig: NextConfig = {
       },
       {
         protocol: "https",
-        hostname: "komiklab.org",
+        hostname: "komikremaja.art",
       },
       {
         protocol: "https",
-        hostname: "*.komiklab.org",
+        hostname: "*.komikremaja.art",
       },
       {
         protocol: "http",
-        hostname: "cdnasu.xyz",
+        hostname: "warungkomikcdn.icu",
       },
       {
         protocol: "https",
-        hostname: "cdnasu.xyz",
+        hostname: "warungkomikcdn.icu",
       },
       {
         protocol: "http",
-        hostname: "*.cdnasu.xyz",
+        hostname: "*.warungkomikcdn.icu",
       },
       {
         protocol: "https",
-        hostname: "*.cdnasu.xyz",
+        hostname: "*.warungkomikcdn.icu",
+      },
+      {
+        protocol: "https",
+        hostname: "i0.wp.com",
+      },
+      {
+        protocol: "https",
+        hostname: "i1.wp.com",
+      },
+      {
+        protocol: "https",
+        hostname: "i2.wp.com",
       },
 
     ],
@@ -49,6 +61,7 @@ const nextConfig: NextConfig = {
   env: {
     DOMAIN_KIRYUU: process.env.DOMAIN_KIRYUU,
     DOMAIN_KOMIK_H: process.env.DOMAIN_KOMIK_H || process.env['DOMAIN_KOMIK_H'],
+    CF_COOKIE_H: process.env.CF_COOKIE_H || process.env['CF_COOKIE_H'],
   },
 };
 
