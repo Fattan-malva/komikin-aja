@@ -2,7 +2,8 @@
 
 import Link from 'next/link'
 import type { Komik } from '@/src/types'
-import { proxyImage } from '@/src/lib/utils'
+import { getImageUrls } from '@/src/lib/utils'
+import { SafeImage } from '@/src/components/SafeImage'
 import Image from 'next/image'
 import TypeBadge from './TypeBadge'
 
@@ -54,8 +55,9 @@ export default function TypeScroll({ items, title, icon }: Props) {
                         className="flex-shrink-0 w-32 group"
                     >
                         <div className="relative aspect-[3/4] overflow-hidden rounded-lg bg-white/5 mb-2">
-                            <img
-                                src={proxyImage(k.thumbnail)}
+                            <SafeImage
+                                src={getImageUrls(k.thumbnail).direct}
+                                proxySrc={getImageUrls(k.thumbnail).proxy}
                                 alt={k.title}
                                 className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-110"
                                 loading="lazy"

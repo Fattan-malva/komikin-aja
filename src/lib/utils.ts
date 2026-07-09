@@ -41,6 +41,14 @@ export function proxyImage(url: string): string {
   return `/api/proxy/image?url=${encodeURIComponent(url)}`
 }
 
+export function getImageUrls(url: string): { direct: string; proxy: string } {
+  if (!url || url.startsWith('/api/proxy/image')) return { direct: url, proxy: url }
+  return {
+    direct: url,
+    proxy: `/api/proxy/image?url=${encodeURIComponent(url)}`,
+  }
+}
+
 export function computeRelevance(title: string, query: string): number {
   const t = title.toLowerCase().trim()
   const q = query.toLowerCase().trim()

@@ -4,23 +4,24 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { getBookmarks, getHistory } from "@/src/lib/storage";
 import { Komik, BookmarkItem, HistoryItem } from "@/src/types";
-import { proxyImage } from "@/src/lib/utils";
+import { getImageUrls } from "@/src/lib/utils";
+import { SafeImage } from "@/src/components/SafeImage";
 import TypeBadge from "@/src/components/TypeBadge";
 
 // Komponen Kartu Bookmark sederhana untuk layout horizontal 2 baris
 function BookmarkCard({ item }: { item: Komik }) {
-  const [imgSrc, setImgSrc] = useState(
-    item.thumbnail ? proxyImage(item.thumbnail) : "/placeholder-comic.jpg",
-  );
+  const urls = item.thumbnail
+    ? getImageUrls(item.thumbnail)
+    : { direct: "/placeholder-comic.jpg", proxy: "/placeholder-comic.jpg" }
 
   return (
     <Link href={`/komik/${item.slug}`} className="block group">
       <div className="w-40 sm:w-48 flex-shrink-0 bg-white/5 rounded-xl overflow-hidden border border-white/10 hover:border-purple-500/50 transition-all duration-300">
         <div className="aspect-[3/4] relative overflow-hidden bg-gray-800">
-          <img
-            src={imgSrc}
+          <SafeImage
+            src={urls.direct}
+            proxySrc={urls.proxy}
             alt={item.title}
-            onError={() => setImgSrc("/placeholder-comic.jpg")}
             className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
           />
           <TypeBadge type={(item as { type?: string }).type} />

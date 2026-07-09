@@ -38,7 +38,7 @@ export async function GET(request: NextRequest) {
         headers: {
           'Content-Type': 'image/svg+xml',
           'Access-Control-Allow-Origin': '*',
-          'Cache-Control': 'public, max-age=3600',
+          'Cache-Control': 'public, max-age=86400, s-maxage=86400, stale-while-revalidate=604800',
         },
       })
     }
@@ -51,7 +51,7 @@ export async function GET(request: NextRequest) {
         headers: {
           'Content-Type': 'image/svg+xml',
           'Access-Control-Allow-Origin': '*',
-          'Cache-Control': 'public, max-age=3600',
+          'Cache-Control': 'public, max-age=86400, s-maxage=86400, stale-while-revalidate=604800',
         },
       })
     }
@@ -63,7 +63,7 @@ export async function GET(request: NextRequest) {
       headers: {
         'Content-Type': contentType,
         'Access-Control-Allow-Origin': '*',
-        'Cache-Control': 'public, max-age=3600',
+        'Cache-Control': 'public, max-age=86400, s-maxage=86400, stale-while-revalidate=604800',
       },
     })
   } catch {
@@ -72,7 +72,7 @@ export async function GET(request: NextRequest) {
       headers: {
         'Content-Type': 'image/svg+xml',
         'Access-Control-Allow-Origin': '*',
-        'Cache-Control': 'public, max-age=3600',
+        'Cache-Control': 'public, max-age=86400, s-maxage=86400, stale-while-revalidate=604800',
       },
     })
   }

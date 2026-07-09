@@ -3,7 +3,8 @@
 import { useState, useEffect, useCallback } from 'react'
 import Link from 'next/link'
 import type { Komik } from '@/src/types'
-import { proxyImage } from '@/src/lib/utils'
+import { getImageUrls } from '@/src/lib/utils'
+import { SafeImage } from '@/src/components/SafeImage'
 import TypeBadge from './TypeBadge'
 
 interface Props {
@@ -35,8 +36,9 @@ export default function BannerCarousel({ items }: Props) {
           className={`absolute inset-0 transition-opacity duration-700 ease-in-out ${i === current ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}
         >
           <Link href={`/komik/${k.slug}`} className="block w-full h-full">
-            <img
-              src={proxyImage(k.thumbnail)}
+            <SafeImage
+              src={getImageUrls(k.thumbnail).direct}
+              proxySrc={getImageUrls(k.thumbnail).proxy}
               alt={k.title}
               className="w-full h-full object-cover"
             />

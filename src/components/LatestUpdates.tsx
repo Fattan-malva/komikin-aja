@@ -1,6 +1,7 @@
 import Link from 'next/link'
 import type { Komik } from '@/src/types'
-import { proxyImage } from '@/src/lib/utils'
+import { getImageUrls } from '@/src/lib/utils'
+import { SafeImage } from '@/src/components/SafeImage'
 import TypeBadge from './TypeBadge'
 
 function timeAgo(dateStr: string): string {
@@ -38,8 +39,9 @@ export default function LatestUpdates({ items }: Props) {
             className="flex items-center gap-4 p-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.07] transition-colors group"
           >
             <div className="relative w-14 h-20 flex-shrink-0 overflow-hidden rounded-lg bg-white/5">
-              <img
-                src={proxyImage(k.thumbnail)}
+              <SafeImage
+                src={getImageUrls(k.thumbnail).direct}
+                proxySrc={getImageUrls(k.thumbnail).proxy}
                 alt={k.title}
                 className="w-full h-full object-cover"
                 loading="lazy"

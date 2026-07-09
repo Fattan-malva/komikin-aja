@@ -1,5 +1,6 @@
 import Link from 'next/link'
-import { proxyImage } from '@/src/lib/utils'
+import { getImageUrls } from '@/src/lib/utils'
+import { SafeImage } from '@/src/components/SafeImage'
 import TypeBadge from './TypeBadge'
 import type { Komik } from '@/src/types'
 
@@ -24,8 +25,9 @@ export default function KomikCard({ komik }: Props) {
       <Link href={`/komik/${komik.slug}`} className="block">
         <div className="relative aspect-[3/4] overflow-hidden rounded-lg bg-white/5 mb-2">
           {hasThumb ? (
-            <img
-              src={proxyImage(komik.thumbnail)}
+            <SafeImage
+              src={getImageUrls(komik.thumbnail).direct}
+              proxySrc={getImageUrls(komik.thumbnail).proxy}
               alt={komik.title}
               className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-110"
               loading="lazy"

@@ -3,7 +3,8 @@
 import Link from "next/link";
 import { useState, useEffect } from "react";
 import type { Chapter, ChapterDetail } from "@/src/types";
-import { proxyImage } from "@/src/lib/utils";
+import { getImageUrls } from "@/src/lib/utils";
+import { SafeImage } from "@/src/components/SafeImage";
 import {
   getReadChapters,
   addReadChapter,
@@ -83,16 +84,20 @@ export default function Reader({ slug, chapterId, data }: Props) {
   return (
     <div className="w-full max-w-4xl mx-auto">
       <div className="space-y-0">
-        {data.images.map((img, i) => (
+        {data.images.map((img, i) => {
+          const urls = getImageUrls(img)
+          return (
           <div key={i} className="w-full bg-black/20">
-            <img
-              src={proxyImage(img)}
+            <SafeImage
+              src={urls.direct}
+              proxySrc={urls.proxy}
               alt={`${chapterId} - Page ${i + 1}`}
               className="w-full h-auto mx-auto"
               loading="lazy"
             />
           </div>
-        ))}
+          )
+        })}
       </div>
 
       {/* Floating Nav Panel */}
