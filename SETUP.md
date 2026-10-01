@@ -1,11 +1,11 @@
 # Setup
 
-## 1. Domain Target (`DOMAIN_KIRYUU`)
+## 1. Domain Target (`DOMAIN_KOMIK`)
 
 Project ini scrape data manga dari domain yang ditentukan di `.env`:
 
 ```
-DOMAIN_KIRYUU=https://v6.kiryuu.to/
+DOMAIN_KOMIK=https://v6.kiryuu.to/
 ```
 
 **Ganti domain** tinggal ubah value-nya. Pastikan strukturnya kompatibel (WordPress + theme yang sama).
@@ -35,7 +35,7 @@ Aplikasi tetap bisa di-*build* dan dijalanin, tapi semua halaman akan kosong/err
 File `.env` di root project:
 
 ```
-DOMAIN_KIRYUU=https://v6.kiryuu.to/
+DOMAIN_KOMIK=https://v6.kiryuu.to/
 CF_COOKIE=cf_clearance=...
 ```
 

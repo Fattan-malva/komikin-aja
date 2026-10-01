@@ -1,207 +1,307 @@
-import axios from "axios";
-import * as cheerio from "cheerio";
-import { getDomain, computeRelevance } from "./utils";
+import { getJson, isTransientError, mapWithConcurrency } from "./http";
+import { invalidatePrimarySource, resolvePrimarySource } from "./resolve";
+import { computeRelevance, formatDate, sanitizeHtml, slugify } from "./utils";
 import type {
-  Komik,
   Chapter,
   ChapterDetail,
-  KomikListResponse,
   Genre,
+  Komik,
+  KomikListResponse,
   SearchFilters,
 } from "@/src/types";
 
-const CF_COOKIE = process.env.CF_COOKIE || "";
+/**
+ * Sumber utama (DOMAIN_KOMIK) adalah situs baca komik Cosmic: halamannya
+ * dirender di sisi client, jadi HTML kosong dan scraping cheerio tidak mungkin.
+ * Datanya diambil dari JSON API publik yang ditemukan resolver di resolve.ts.
+ */
 
-const axiosInstance = axios.create({
-  timeout: 30000,
-  headers: {
-    "User-Agent":
-      "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
-    Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-    ...(CF_COOKIE ? { Cookie: CF_COOKIE } : {}),
-  },
-});
+const PAGE_SIZE = 24;
+const MAX_PAGES = 20;
+const MAX_WALK_STEPS = 20;
+const GENRE_CACHE_TTL = 60 * 60 * 1000;
 
-function parseKomikCards(html: string): Komik[] {
-  const $ = cheerio.load(html);
-  const seen = new Set<string>();
-  const komik: Komik[] = [];
-
-  $("#project-list > div, #latest-list > div").each((_, el) => {
-    const card = $(el);
-    const link = card.find('a[color="primary"]').first();
-    const href = link.attr("href") || "";
-    const slug = href.split("/manga/")[1]?.replace(/\/$/, "") || "";
-    if (!slug || seen.has(slug)) return;
-    seen.add(slug);
-
-    const title = card.find("h1.text-\\[15px\\]").first().text().trim();
-    const thumbnail = card.find("img.wp-post-image").first().attr("src") || "";
-    const rating = card.find("div.numscore").first().text().trim();
-    const status = card
-      .find("div.flex.items-center.gap-1.font-normal.text-xs > p")
-      .first()
-      .text()
-      .trim();
-    const chapterLink = card.find("a.link-self").first();
-    const chapterUrl = chapterLink.attr("href") || "";
-    const date = card.find("time").first().attr("datetime") || "";
-    const rawType = card.find("span.absolute.z-1 img").first().attr("alt")?.trim() || "";
-    const type = rawType ? rawType.charAt(0).toUpperCase() + rawType.slice(1) : "";
-
-    if (title) {
-      komik.push({
-        slug,
-        title,
-        thumbnail,
-        type,
-        rating,
-        status,
-        latestChapter: chapterUrl.split("/").filter(Boolean).pop() || "",
-        date,
-      });
-    }
-  });
-
-  return komik;
+interface ApiChapter {
+  chapterNum?: string | null;
+  slug?: string | null;
+  time?: string | null;
 }
 
-export async function getHome(page: number = 1): Promise<KomikListResponse> {
-  const domain = getDomain();
-  const url = page === 1 ? domain : `${domain}/page/${page}/`;
-  const { data } = await axiosInstance.get(url);
-  const komik = parseKomikCards(data);
+interface ApiManga {
+  title?: string | null;
+  slug?: string | null;
+  cover?: string | null;
+  big_cover?: string | null;
+  badge?: string | null;
+  rating?: string | null;
+  status?: string | null;
+  type?: string | null;
+  sinopsis?: string | null;
+  author?: string | null;
+  artist?: string | null;
+  genres?: string[] | null;
+  genre?: string[] | string | null;
+  chapters?: ApiChapter[] | null;
+}
 
-  const $ = cheerio.load(data);
-  let totalPages = 1;
-  const pageLinks = $("a.page-numbers:not(.next):not(.prev)");
-  if (pageLinks.length > 0) {
-    const nums = pageLinks
-      .map((_, el) => parseInt($(el).text().trim()))
-      .get()
-      .filter((n) => !isNaN(n));
-    if (nums.length > 0) totalPages = Math.max(...nums);
+interface ApiCursor {
+  hasNext?: boolean;
+  nextCursor?: string | null;
+}
+
+interface ApiList {
+  success?: boolean;
+  data?: ApiManga[] | null;
+  cursor?: ApiCursor | null;
+}
+
+interface ApiDetail {
+  success?: boolean;
+  data?: ApiManga | null;
+}
+
+interface ApiChapterPage {
+  success?: boolean;
+  data?: {
+    chapters?: string[] | null;
+    otherChapters?: ApiChapter[] | null;
+    slugManga?: string | null;
+  } | null;
+}
+
+interface ListResult {
+  items: Komik[];
+  page: number;
+  hasNext: boolean;
+}
+
+/* ------------------------------------------------------------------ *
+ * Pemanggilan API
+ * ------------------------------------------------------------------ */
+
+/**
+ * API memakai cursor, bukan nomor halaman. Error transient (subdomain/CDN
+ * bermasalah) memicu resolve ulang domain lalu percobaan kedua.
+ */
+async function cosmic<T>(fn: (apiBase: string) => Promise<T>): Promise<T> {
+  const source = await resolvePrimarySource();
+  if (source.kind !== "cosmic") {
+    throw new Error(
+      `Domain ${source.entry} mengarah ke ${source.origin} yang bukan situs Cosmic yang didukung.`,
+    );
   }
 
-  return { komik, totalPages, currentPage: page };
+  try {
+    return await fn(source.apiBase);
+  } catch (err) {
+    if (!isTransientError(err)) throw err;
+    invalidatePrimarySource();
+    return fn((await resolvePrimarySource()).apiBase);
+  }
+}
+
+function buildUrl(apiBase: string, path: string, params: Record<string, string>): string {
+  const search = new URLSearchParams(params);
+  return `${apiBase}${path}?${search.toString()}`;
+}
+
+async function requestList(
+  apiBase: string,
+  path: string,
+  params: Record<string, string>,
+  after?: string,
+): Promise<ApiList> {
+  const next: Record<string, string> = { ...params };
+  if (after) next.after = after;
+
+  const res = await getJson<ApiList>(buildUrl(apiBase, path, next));
+  if (!res || res.success !== true || !Array.isArray(res.data)) {
+    throw new Error(`API sumber menolak permintaan ${path}.`);
+  }
+  return res;
+}
+
+/** cacheKey -> (nomor halaman -> cursor `after` untuk halaman itu) */
+const cursorCache = new Map<string, Map<number, string | undefined>>();
+
+function listKey(path: string, params: Record<string, string>): string {
+  const search = new URLSearchParams(params);
+  search.sort();
+  return `${path}?${search.toString()}`;
+}
+
+async function listPage(
+  path: string,
+  params: Record<string, string>,
+  page: number,
+): Promise<ListResult> {
+  const target = Math.min(Math.max(1, Math.floor(page) || 1), MAX_PAGES);
+
+  return cosmic(async (apiBase) => {
+    const key = listKey(path, params);
+    let store = cursorCache.get(key);
+    if (!store) {
+      store = new Map<number, string | undefined>([[1, undefined]]);
+      cursorCache.set(key, store);
+    }
+
+    const toResult = (res: ApiList, current: number): ListResult => ({
+      items: (res.data ?? [])
+        .filter((raw) => raw?.slug && raw?.title)
+        .map((raw) => mapListItem(raw)),
+      page: current,
+      hasNext: Boolean(res.cursor?.nextCursor),
+    });
+
+    if (store.has(target)) {
+      return toResult(await requestList(apiBase, path, params, store.get(target)), target);
+    }
+
+    // Mulai dari halaman terdalam yang sudah diketahui, lalu majukan cursor.
+    let from = 1;
+    for (const known of store.keys()) {
+      if (known > from && known < target) from = known;
+    }
+
+    let res = await requestList(apiBase, path, params, store.get(from));
+    let current = from;
+    let hasNext = Boolean(res.cursor?.nextCursor);
+    let steps = 0;
+
+    while (current < target && hasNext && steps < MAX_WALK_STEPS) {
+      const nextCursor = res.cursor?.nextCursor;
+      if (!nextCursor) break;
+      current++;
+      steps++;
+      store.set(current, nextCursor);
+      res = await requestList(apiBase, path, params, nextCursor);
+      hasNext = Boolean(res.cursor?.nextCursor);
+    }
+
+    // Habis data sebelum sampai halaman yang diminta: kembalikan halaman terakhir.
+    return toResult(res, Math.min(current, target));
+  });
+}
+
+/* ------------------------------------------------------------------ *
+ * Pemetaan payload
+ * ------------------------------------------------------------------ */
+
+function toChapters(list?: ApiChapter[] | null): Chapter[] {
+  if (!Array.isArray(list)) return [];
+  const out: Chapter[] = [];
+  const seen = new Set<string>();
+  for (const entry of list) {
+    const slug = entry?.slug;
+    if (!slug || seen.has(slug)) continue;
+    const number = String(entry.chapterNum ?? "").trim();
+    seen.add(slug);
+    out.push({
+      slug,
+      number,
+      // ChapterList menampilkan `title`, jadi selalu diisi walau API tidak
+      // mengirimnya (kartu chapter dari sumber kedua memakai label "Chapter N").
+      title: number ? `Chapter ${number}` : "Chapter",
+      date: formatDate(entry.time),
+    });
+  }
+  return out;
+}
+
+function normalizeGenres(raw: ApiManga): string[] {
+  const source = raw.genres ?? raw.genre;
+  if (Array.isArray(source)) {
+    return source
+      .filter((g): g is string => typeof g === "string")
+      .map((g) => g.trim())
+      .filter(Boolean);
+  }
+  if (typeof source === "string") {
+    return source
+      .split(",")
+      .map((g) => g.trim())
+      .filter(Boolean);
+  }
+  return [];
+}
+
+function mapListItem(raw: ApiManga): Komik {
+  const chapters = toChapters(raw.chapters);
+  const latest = chapters[0];
+  return {
+    slug: raw.slug ?? "",
+    title: raw.title ?? "",
+    thumbnail: raw.cover ?? raw.big_cover ?? "",
+    type: raw.type ?? "",
+    status: raw.status ?? "",
+    rating: raw.rating ?? "",
+    genres: normalizeGenres(raw),
+    latestChapter: latest?.number ?? "",
+    date: latest?.date ?? "",
+  };
+}
+
+function mapDetail(raw: ApiManga): Komik {
+  return {
+    ...mapListItem(raw),
+    slug: raw.slug ?? "",
+    synopsis: sanitizeHtml(raw.sinopsis ?? ""),
+    author: raw.author ?? "",
+    artist: raw.artist ?? "",
+    chapters: toChapters(raw.chapters),
+  };
+}
+
+function toListResponse(result: ListResult): KomikListResponse {
+  return {
+    komik: result.items,
+    currentPage: result.page,
+    totalPages: result.hasNext ? result.page + 1 : result.page,
+  };
+}
+
+/* ------------------------------------------------------------------ *
+ * API publik
+ * ------------------------------------------------------------------ */
+
+export async function getHome(page: number = 1): Promise<KomikListResponse> {
+  // `order_by=update` urutan dan isinya sama persis dengan `/v1/manga/latest`,
+  // tapi ikut membawa `type` dan `genres` yang dibutuhkan kartu.
+  return toListResponse(
+    await listPage(
+      "/v1/manga/filter",
+      { limit: String(PAGE_SIZE), order_by: "update" },
+      page,
+    ),
+  );
 }
 
 export async function getPopular(page: number = 1): Promise<KomikListResponse> {
-  const domain = getDomain();
-  const nonce = await getSearchNonce();
-
-  const params = new URLSearchParams();
-  params.append("nonce", nonce);
-  params.append("page", String(page));
-  params.append("order", "desc");
-  params.append("orderby", "popular");
-
-  const { data } = await axiosInstance.post(
-    `${domain}/wp-admin/admin-ajax.php?action=advanced_search`,
-    params.toString(),
-    { headers: { "Content-Type": "application/x-www-form-urlencoded" } },
+  return toListResponse(
+    await listPage("/v1/manga/popularToday", { limit: String(PAGE_SIZE) }, page),
   );
-
-  const $ = cheerio.load(data);
-  const seen = new Set<string>();
-  const komik: Komik[] = [];
-
-  $("div.group-data-\\[mode\\=horizontal\\]\\:hidden").each((_, el) => {
-    const card = $(el);
-    const link = card.find('a[color="primary"]').first();
-    const href = link.attr("href") || "";
-    const slug = href.split("/manga/")[1]?.replace(/\/$/, "") || "";
-    if (!slug || seen.has(slug)) return;
-    seen.add(slug);
-
-    const title = card.find("h1.text-\\[15px\\]").first().text().trim();
-    const thumbnail = card.find("img.wp-post-image").first().attr("src") || "";
-    const rating = card.find("div.numscore").first().text().trim();
-    const rawType = card.find("span.absolute.z-1 img").first().attr("alt")?.trim() || "";
-    const type = rawType ? rawType.charAt(0).toUpperCase() + rawType.slice(1) : "";
-
-    if (title) {
-      komik.push({ slug, title, thumbnail, type, rating });
-    }
-  });
-
-  return { komik, currentPage: page };
 }
+
+const TYPE_LABEL: Record<string, string> = {
+  manhwa: "Manhwa",
+  manga: "Manga",
+  manhua: "Manhua",
+};
 
 export async function getByType(
   type: string,
   page: number = 1,
 ): Promise<KomikListResponse> {
-  const domain = getDomain();
-  const nonce = await getSearchNonce();
-
-  // Map type to the format expected by the API
-  const typeMap: Record<string, string> = {
-    manhwa: "Manhwa",
-    manga: "Manga",
-    manhua: "Manhua",
-  };
-
-  const searchType = typeMap[type.toLowerCase()] || type;
-
-  const params = new URLSearchParams();
-  params.append("nonce", nonce);
-  params.append("type", JSON.stringify([searchType]));
-  params.append("page", String(page));
-  params.append("order", "desc");
-  params.append("orderby", "popular");
-
-  const { data } = await axiosInstance.post(
-    `${domain}/wp-admin/admin-ajax.php?action=advanced_search`,
-    params.toString(),
-    { headers: { "Content-Type": "application/x-www-form-urlencoded" } },
+  const label = TYPE_LABEL[type.toLowerCase()] ?? type;
+  return toListResponse(
+    await listPage(
+      "/v1/manga/filter",
+      { limit: String(PAGE_SIZE), type_manga: label },
+      page,
+    ),
   );
-
-  const $ = cheerio.load(data);
-  const seen = new Set<string>();
-  const komik: Komik[] = [];
-
-  $("div.group-data-\\[mode\\=horizontal\\]\\:hidden").each((_, el) => {
-    const card = $(el);
-    const link = card.find('a[color="primary"]').first();
-    const href = link.attr("href") || "";
-    const slug = href.split("/manga/")[1]?.replace(/\/$/, "") || "";
-    if (!slug || seen.has(slug)) return;
-    seen.add(slug);
-
-    const title = card.find("h1.text-\\[15px\\]").first().text().trim();
-    const thumbnail = card.find("img.wp-post-image").first().attr("src") || "";
-    const rating = card.find("div.numscore").first().text().trim();
-    const status = card.find("p.font-normal.text-xs").last().text().trim();
-    const rawType = card.find("span.absolute.z-1 img").first().attr("alt")?.trim() || "";
-    const itemType = rawType ? rawType.charAt(0).toUpperCase() + rawType.slice(1) : "";
-
-    if (title) {
-      komik.push({ slug, title, thumbnail, type: itemType, rating, status });
-    }
-  });
-
-  let totalPages = 1;
-  const pageBtns = $('button[onclick*="addSingularFilter"]').filter((_, el) => {
-    return /'addSingularFilter'\]\('page',\s*'(\d+)'/i.test(
-      $(el).attr("onclick") || "",
-    );
-  });
-  const nums = pageBtns
-    .map((_, el) => {
-      const m = $(el)
-        .attr("onclick")
-        ?.match(/'addSingularFilter'\]\('page',\s*'(\d+)'/i);
-      return m ? parseInt(m[1]) : NaN;
-    })
-    .get()
-    .filter((n) => !isNaN(n));
-  if (nums.length > 0) totalPages = Math.max(...nums);
-
-  return { komik, totalPages, currentPage: page };
 }
 
-// Fungsi spesifik untuk masing-masing tipe
 export async function getManhwa(page: number = 1): Promise<KomikListResponse> {
   return getByType("manhwa", page);
 }
@@ -215,237 +315,70 @@ export async function getManhua(page: number = 1): Promise<KomikListResponse> {
 }
 
 export async function getDetail(slug: string): Promise<Komik | null> {
-  const domain = getDomain();
-  const url = `${domain}/manga/${slug}/`;
-  const { data } = await axiosInstance.get(url);
-  const $ = cheerio.load(data);
-
-  const title = $('h1[itemprop="name"]').first().text().trim();
-  if (!title) return null;
-
-  const thumbnail = $("img.wp-post-image").first().attr("src") || "";
-  const synopsis = $('div[itemprop="description"][data-show="true"]')
-    .first()
-    .text()
-    .trim();
-  const rating = $('li:has([data-lucide="star"]) span.font-bold')
-    .first()
-    .text()
-    .trim();
-
-  const genres: string[] = [];
-  $('a[itemprop="genre"]').each((_, el) => {
-    const genre = $(el).find("span.flex-1").first().text().trim();
-    if (genre) genres.push(genre);
-  });
-
-  let type = "";
-  let status = "";
-  let author = "";
-  let released = "";
-  $("div.flex.sm\\:justify-between.justify-start.items-center.gap-2").each(
-    (_, el) => {
-      const row = $(el);
-      const label = row
-        .find("span.font-semibold")
-        .first()
-        .text()
-        .trim()
-        .toLowerCase();
-      const value = row.find("p.font-normal.text-sm").first().text().trim();
-      if (label === "type") type = value;
-      else if (label === "status") status = value;
-      else if (label === "author") author = value;
-      else if (label === "released") released = value;
-    },
-  );
-
-  if (!status) {
-    status = $("div.flex.items-center.gap-1.font-normal.text-xs > p")
-      .first()
-      .text()
-      .trim();
+  if (!slug) return null;
+  try {
+    const res = await cosmic((apiBase) =>
+      getJson<ApiDetail>(`${apiBase}/v1/manga/mangaDetail/${encodeURIComponent(slug)}`),
+    );
+    const data = res?.data;
+    if (!data?.slug || !data?.title) return null;
+    return mapDetail(data);
+  } catch {
+    return null;
   }
-
-  let chapters: Chapter[] = [];
-  const chapterListEl = $("#chapter-list");
-  chapterListEl.find('div[data-chapter-number]').each((_, el) => {
-    const chapterDiv = $(el);
-    const number = chapterDiv.attr("data-chapter-number") || "";
-    const link = chapterDiv.find("a[href*='/manga/']").first();
-    const href = link.attr("href") || "";
-    const slug = href.split("/").filter(Boolean).pop()?.replace(/\/$/, "") || "";
-    const title = chapterDiv.find("span").first().text().trim() || undefined;
-    const date = chapterDiv.find("time").first().attr("datetime") || undefined;
-
-    if (slug && number) {
-      chapters.push({ slug, number, title, date });
-    }
-  });
-
-  if (chapters.length === 0) {
-    const hxGet = chapterListEl.attr("hx-get");
-    if (hxGet) {
-      const params = new URLSearchParams(hxGet.split("?")[1]);
-      const mangaId = params.get("manga_id") || "";
-      if (mangaId) {
-        try {
-          chapters = await getChapterList(mangaId);
-        } catch {
-          chapters = [];
-        }
-      }
-    }
-  }
-
-  return {
-    slug,
-    title,
-    thumbnail,
-    type,
-    status,
-    rating,
-    synopsis,
-    genres,
-    author,
-    chapters,
-  };
 }
 
-// src/lib/scraper.ts
-
-export async function getChapterList(mangaId: string): Promise<Chapter[]> {
-  const domain = getDomain();
-  const seenAll = new Set<string>();
-  const allChapters: Chapter[] = [];
-  const BATCH_SIZE = 5;
-  const MAX_PAGES = 10;
-  let page = 1;
-
-  while (page <= MAX_PAGES) {
-    const batchEnd = Math.min(page + BATCH_SIZE - 1, MAX_PAGES);
-    const batch: Promise<{ page: number; chapters: Chapter[] }>[] = [];
-
-    for (let p = page; p <= batchEnd; p++) {
-      const url = `${domain}/wp-admin/admin-ajax.php?manga_id=${mangaId}&page=${p}&action=chapter_list&_=${Date.now()}`;
-      batch.push(
-        axiosInstance
-          .get(url, {
-            headers: {
-              Referer: `${domain}/manga/`,
-              "Cache-Control": "no-cache",
-              Pragma: "no-cache",
-            },
-          })
-          .then(({ data }) => {
-            const $ = cheerio.load(data);
-            const chapters: Chapter[] = [];
-            const seenLocal = new Set<string>();
-
-            $("a").each((_, el) => {
-              const href = $(el).attr("href") || "";
-              const slug = href.split("/").filter(Boolean).pop() || "";
-              const match = slug.match(/^chapter-([\d.]+)$/);
-              if (match && !seenLocal.has(slug)) {
-                seenLocal.add(slug);
-                chapters.push({
-                  slug,
-                  number: match[1],
-                  title: $(el).text().trim() || undefined,
-                });
-              }
-            });
-
-            return { page: p, chapters };
-          })
-          .catch(() => ({ page: p, chapters: [] as Chapter[] })),
-      );
-    }
-
-    const results = await Promise.all(batch);
-    let anyEmpty = false;
-
-    for (const result of results) {
-      if (result.chapters.length === 0) {
-        anyEmpty = true;
-        break;
-      }
-      let newCount = 0;
-      for (const ch of result.chapters) {
-        if (!seenAll.has(ch.slug)) {
-          seenAll.add(ch.slug);
-          newCount++;
-          allChapters.push(ch);
-        }
-      }
-      if (newCount === 0) {
-        anyEmpty = true;
-        break;
-      }
-    }
-
-    if (anyEmpty) break;
-    page = batchEnd + 1;
+function extractImages(chunks?: string[] | null): string[] {
+  if (!Array.isArray(chunks)) return [];
+  const images: string[] = [];
+  for (const chunk of chunks) {
+    const src = /<img[^>]+src=['"]([^'"]+)['"]/i.exec(chunk ?? "")?.[1];
+    if (src) images.push(src);
   }
-
-  return allChapters;
+  return images;
 }
 
 export async function getChapterImages(
-  slug: string,
+  _slug: string,
   chapterSlug: string,
 ): Promise<ChapterDetail | null> {
-  const domain = getDomain();
-  const url = `${domain}/manga/${slug}/${chapterSlug}/`;
-  const { data } = await axiosInstance.get(url);
-  const $ = cheerio.load(data);
+  if (!chapterSlug) return null;
 
-  const images: string[] = [];
-  $('section[data-image-data="1"] img').each((_, el) => {
-    const src = $(el).attr("src");
-    if (src) images.push(src);
-  });
+  try {
+    const res = await cosmic((apiBase) =>
+      getJson<ApiChapterPage>(
+        `${apiBase}/v1/manga/readingPage/${encodeURIComponent(chapterSlug)}`,
+      ),
+    );
+    const data = res?.data;
+    if (!data) return null;
 
-  if (images.length === 0) return null;
+    const images = extractImages(data.chapters);
+    if (images.length === 0) return null;
 
-  let prev = "";
-  let next = "";
-  const prevBtn = $("#previous-chapter");
-  const nextBtn = $("#next-chapter");
-  const prevOnClick = prevBtn.attr("onclick") || "";
-  const nextOnClick = nextBtn.attr("onclick") || "";
-  const prevMatch = prevOnClick.match(/href='([^']+)'/);
-  const nextMatch = nextOnClick.match(/href='([^']+)'/);
-  if (prevMatch) prev = prevMatch[1].split("/").filter(Boolean).pop() || "";
-  if (nextMatch) next = nextMatch[1].split("/").filter(Boolean).pop() || "";
+    // otherChapters diurutkan terbaru -> terlama.
+    const chapters = toChapters(data.otherChapters);
+    const index = chapters.findIndex((c) => c.slug === chapterSlug);
 
-  let chapters: Chapter[] = [];
-  const chapterListEl = $("#chapter-list");
-  const hxGet = chapterListEl.attr("hx-get");
-  if (hxGet) {
-    const params = new URLSearchParams(hxGet.split("?")[1]);
-    const mangaId = params.get("manga_id") || "";
-    if (mangaId) {
-      try {
-        chapters = await getChapterList(mangaId);
-      } catch {
-        chapters = [];
-      }
-    }
+    return {
+      images,
+      next: index > 0 ? chapters[index - 1].slug : "",
+      prev: index >= 0 ? (chapters[index + 1]?.slug ?? "") : "",
+      chapters,
+    };
+  } catch {
+    return null;
   }
+}
 
-  if (chapters.length === 0) {
-    try {
-      const detail = await getDetail(slug);
-      if (detail?.chapters) {
-        chapters = detail.chapters;
-      }
-    } catch {
-      chapters = [];
-    }
+async function searchApi(apiBase: string, term: string): Promise<ApiList | null> {
+  try {
+    return await getJson<ApiList>(
+      buildUrl(apiBase, "/v1/manga/search", { q: term, limit: "100" }),
+    );
+  } catch {
+    return null;
   }
-
-  return { images, prev, next, chapters };
 }
 
 export async function searchKomik(
@@ -453,236 +386,129 @@ export async function searchKomik(
   page: number = 1,
   filters?: SearchFilters,
 ): Promise<KomikListResponse> {
-  const domain = getDomain();
-  const nonce = await getSearchNonce();
+  const term = query.trim();
+  if (!term) return { komik: [], currentPage: 1, totalPages: 1 };
 
-  const advParams = new URLSearchParams({ nonce, search_term: query, page: String(page) });
-  if (filters) {
-    if (filters.order) advParams.set("order", filters.order);
-    if (filters.orderby) advParams.set("orderby", filters.orderby);
-    if (filters.genre) advParams.append("genre", filters.genre);
-    if (filters.type) advParams.append("the_type", filters.type);
-    if (filters.status) advParams.append("the_status", filters.status);
-    if (filters.author) advParams.append("the_author", filters.author);
-    if (filters.artist) advParams.append("the_artist", filters.artist);
-    if (filters.exclude) advParams.append("the_exclude", filters.exclude);
-    if (filters.project) advParams.append("project", filters.project);
-  }
-  if (!advParams.has("order")) advParams.set("order", "desc");
-  if (!advParams.has("orderby")) advParams.set("orderby", "relevance");
-
-  const [directHtml, advHtml] = await Promise.allSettled([
-    axiosInstance.post(
-      `${domain}/wp-admin/admin-ajax.php?action=search&nonce=${nonce}`,
-      new URLSearchParams({ query }).toString(),
-      { headers: { "Content-Type": "application/x-www-form-urlencoded" } },
-    ),
-    axiosInstance.post(
-      `${domain}/wp-admin/admin-ajax.php?action=advanced_search`,
-      advParams.toString(),
-      { headers: { "Content-Type": "application/x-www-form-urlencoded" } },
-    ),
-  ]);
-
-  const detailsBySlug = new Map<string, Komik>();
-
-  // Parse advanced search results for details (rating, status, type)
-  if (advHtml.status === "fulfilled") {
-    const $ = cheerio.load(advHtml.value.data);
-    const seen = new Set<string>();
-
-    $("div.group-data-\\[mode\\=horizontal\\]\\:hidden").each((_, el) => {
-      const card = $(el);
-      const link = card.find('a[color="primary"]').first();
-      const href = link.attr("href") || "";
-      const slug = href.split("/manga/")[1]?.replace(/\/$/, "") || "";
-      if (!slug || seen.has(slug)) return;
-      seen.add(slug);
-
-      const title = card.find("h1.text-\\[15px\\]").first().text().trim();
-      const thumbnail = card.find("img.wp-post-image").first().attr("src") || "";
-      const rating = card.find("div.numscore").first().text().trim();
-      const status = card.find("p.font-normal.text-xs").last().text().trim();
-      const rawType = card.find("span.absolute.z-1 img").first().attr("alt")?.trim() || "";
-      const type = rawType ? rawType.charAt(0).toUpperCase() + rawType.slice(1) : "";
-
-      if (title) {
-        detailsBySlug.set(slug, { slug, title, thumbnail, type, rating, status });
+  const collected = await cosmic(async (apiBase) => {
+    const found = new Map<string, ApiManga>();
+    const absorb = (res: ApiList | null) => {
+      for (const raw of res?.data ?? []) {
+        if (raw?.slug && raw?.title) found.set(raw.slug, raw);
       }
-    });
+    };
+
+    absorb(await searchApi(apiBase, term));
+
+    // Pencarian API memCocokkan frasa secara literal, jadi "one piece" hanya
+    // menghasilkan 2 hasil. Kalau masih sedikit, sambung dengan pencarian per
+    // kata lalu biarkan computeRelevance yang mengurutkannya.
+    if (found.size < PAGE_SIZE) {
+      const tokens = term
+        .split(/\s+/)
+        .map((t) => t.trim())
+        .filter((t) => t.length > 2 && t.toLowerCase() !== term.toLowerCase());
+
+      const extras = await Promise.all(
+        tokens.slice(0, 2).map((token) => searchApi(apiBase, token)),
+      );
+      extras.forEach(absorb);
+    }
+
+    return found;
+  });
+
+  let items = [...collected.values()].map((raw) => mapListItem(raw));
+
+  if (filters?.genre) {
+    const want = slugify(filters.genre);
+    items = items.filter((k) =>
+      (k.genres ?? []).some((g) => slugify(g) === want),
+    );
+  }
+  if (filters?.type) {
+    const want = filters.type.toLowerCase();
+    items = items.filter((k) => (k.type ?? "").toLowerCase() === want);
   }
 
-  // Parse direct search results (actual matches from action=search)
-  const direct: Komik[] = [];
-  if (directHtml.status === "fulfilled") {
-    const $ = cheerio.load(directHtml.value.data);
-    $("#searchResults > a").each((_, el) => {
-      const link = $(el);
-      const href = link.attr("href") || "";
-      const slug = href.split("/manga/")[1]?.replace(/\/$/, "") || "";
-      if (!slug) return;
-
-      const title = link.find("h3").first().text().trim();
-      if (!title) return;
-
-      const thumbnail = link.find("img").first().attr("src") || "";
-      const details = detailsBySlug.get(slug);
-      direct.push({
-        slug,
-        title,
-        thumbnail: thumbnail || details?.thumbnail || "",
-        type: details?.type,
-        rating: details?.rating,
-        status: details?.status,
-      });
-    });
-  }
-
-  // Sort direct results by relevance
-  direct.sort((a, b) => {
-    const relA = computeRelevance(a.title, query);
-    const relB = computeRelevance(b.title, query);
+  items.sort((a, b) => {
+    const relA = computeRelevance(a.title, term);
+    const relB = computeRelevance(b.title, term);
     if (relA !== relB) return relB - relA;
     return parseFloat(b.rating || "0") - parseFloat(a.rating || "0");
   });
 
-  let totalPages = 1;
-  if (advHtml.status === "fulfilled") {
-    const $ = cheerio.load(advHtml.value.data);
-    const pageBtns = $('button[onclick*="addSingularFilter"]').filter((_, el) => {
-      return /'addSingularFilter'\]\('page',\s*'(\d+)'/i.test(
-        $(el).attr("onclick") || "",
-      );
-    });
-    const nums = pageBtns
-      .map((_, el) => {
-        const m = $(el)
-          .attr("onclick")
-          ?.match(/'addSingularFilter'\]\('page',\s*'(\d+)'/i);
-        return m ? parseInt(m[1]) : NaN;
-      })
-      .get()
-      .filter((n) => !isNaN(n));
-    if (nums.length > 0) totalPages = Math.max(...nums);
-  }
+  const totalPages = Math.max(1, Math.ceil(items.length / PAGE_SIZE));
+  const current = Math.min(Math.max(1, Math.floor(page) || 1), totalPages);
+  const slice = items.slice((current - 1) * PAGE_SIZE, current * PAGE_SIZE);
 
-  return { komik: direct, totalPages, currentPage: page };
+  // Hasil pencarian tidak menyertakan type/status, jadi lengkapi seperlunya.
+  const details = await mapWithConcurrency(slice, 6, (item) =>
+    getDetail(item.slug),
+  );
+  const komik = slice.map((item, index) => {
+    const detail = details[index];
+    if (!detail) return item;
+    return {
+      ...detail,
+      slug: item.slug,
+      title: item.title,
+      thumbnail: item.thumbnail || detail.thumbnail,
+    };
+  });
+
+  return { komik, currentPage: current, totalPages };
 }
 
-let cachedNonce = "";
-
-async function getSearchNonce(): Promise<string> {
-  if (cachedNonce) return cachedNonce;
-  const domain = getDomain();
-  const { data } = await axiosInstance.get(domain);
-  const match = data.match(/nonce=([a-f0-9]+)/);
-  if (match) {
-    cachedNonce = match[1];
-    return cachedNonce;
-  }
-  return "";
-}
+let genreCache: { at: number; genres: Genre[] } | null = null;
 
 export async function getGenreList(): Promise<Genre[]> {
-  const domain = getDomain();
-  const seen = new Set<string>();
-  const genres: Genre[] = [];
-
-  try {
-    const homeData = await getHome(1);
-    const slugs = homeData.komik.slice(0, 20).map((k) => k.slug);
-
-    const results = await Promise.allSettled(
-      slugs.map((slug) =>
-        axiosInstance.get(`${domain}/manga/${slug}/`).then(({ data }) => {
-          const $ = cheerio.load(data);
-          const out: Genre[] = [];
-          $('a[itemprop="genre"]').each((_, el) => {
-            const href = $(el).attr("href") || "";
-            const slug2 = href.split("/genre/")[1]?.replace(/\/$/, "") || "";
-            const name =
-              $(el).find("span.flex-1").first().text().trim() ||
-              $(el).text().trim();
-            if (slug2 && name && !seen.has(slug2)) {
-              seen.add(slug2);
-              out.push({ slug: slug2, name });
-            }
-          });
-          return out;
-        }),
-      ),
-    );
-
-    for (const r of results) {
-      if (r.status === "fulfilled") genres.push(...r.value);
-    }
-  } catch {
-    // Return whatever genres were collected, or empty array
+  if (genreCache && Date.now() - genreCache.at < GENRE_CACHE_TTL) {
+    return genreCache.genres;
   }
 
-  return genres;
+  try {
+    // Satu request sudah cukup: tiap item hasil filter membawa daftar genre-nya.
+    const result = await listPage("/v1/manga/filter", { limit: "60" }, 1);
+    const seen = new Map<string, Genre>();
+    for (const item of result.items) {
+      for (const name of item.genres ?? []) {
+        const slug = slugify(name);
+        if (slug && !seen.has(slug)) seen.set(slug, { name, slug });
+      }
+    }
+
+    const genres = [...seen.values()].sort((a, b) =>
+      a.name.localeCompare(b.name, "id"),
+    );
+    genreCache = { at: Date.now(), genres };
+    return genres;
+  } catch {
+    return genreCache?.genres ?? [];
+  }
 }
 
 export async function getGenre(
   genre: string,
   page: number = 1,
 ): Promise<KomikListResponse> {
-  const domain = getDomain();
-  const nonce = await getSearchNonce();
+  const slug = slugify(genre);
+  if (!slug) return { komik: [], currentPage: 1, totalPages: 1 };
 
-  const params = new URLSearchParams();
-  params.append("nonce", nonce);
-  params.append("genre", JSON.stringify([genre]));
-  params.append("page", String(page));
-  params.append("order", "desc");
-  params.append("orderby", "popular");
-
-  const { data } = await axiosInstance.post(
-    `${domain}/wp-admin/admin-ajax.php?action=advanced_search`,
-    params.toString(),
-    { headers: { "Content-Type": "application/x-www-form-urlencoded" } },
+  const result = await listPage(
+    "/v1/manga/filter",
+    { limit: String(PAGE_SIZE), genres_slug: slug },
+    page,
   );
 
-  const $ = cheerio.load(data);
-  const seen = new Set<string>();
-  const komik: Komik[] = [];
-
-  $("div.group-data-\\[mode\\=horizontal\\]\\:hidden").each((_, el) => {
-    const card = $(el);
-    const link = card.find('a[color="primary"]').first();
-    const href = link.attr("href") || "";
-    const slug = href.split("/manga/")[1]?.replace(/\/$/, "") || "";
-    if (!slug || seen.has(slug)) return;
-    seen.add(slug);
-
-    const title = card.find("h1.text-\\[15px\\]").first().text().trim();
-    const thumbnail = card.find("img.wp-post-image").first().attr("src") || "";
-    const rating = card.find("div.numscore").first().text().trim();
-    const status = card.find("p.font-normal.text-xs").last().text().trim();
-    const rawType = card.find("span.absolute.z-1 img").first().attr("alt")?.trim() || "";
-    const type = rawType ? rawType.charAt(0).toUpperCase() + rawType.slice(1) : "";
-
-      if (title) {
-        komik.push({ slug, title, thumbnail, type, rating, status });
-      }
-    });
-
-    let totalPages = 1;
-    const pageBtns = $('button[onclick*="addSingularFilter"]').filter((_, el) => {
-      return /'addSingularFilter'\]\('page',\s*'(\d+)'/i.test(
-        $(el).attr("onclick") || "",
-      );
-    });
-    const nums = pageBtns
-      .map((_, el) => {
-        const m = $(el)
-          .attr("onclick")
-          ?.match(/'addSingularFilter'\]\('page',\s*'(\d+)'/i);
-        return m ? parseInt(m[1]) : NaN;
-      })
-      .get()
-      .filter((n) => !isNaN(n));
-    if (nums.length > 0) totalPages = Math.max(...nums);
-
-    return { komik, totalPages, currentPage: page };
+  // API mengabaikan slug genre yang tidak dikenal dan mengembalikan daftar
+  // default, jadi pastikan hasilnya benar-benar bergenre tersebut.
+  if (
+    result.page === 1 &&
+    result.items.length > 0 &&
+    !result.items.some((k) => (k.genres ?? []).some((g) => slugify(g) === slug))
+  ) {
+    return { komik: [], currentPage: 1, totalPages: 1 };
   }
+
+  return toListResponse(result);
+}

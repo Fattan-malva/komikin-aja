@@ -4,7 +4,7 @@
 This version has breaking changes — APIs, conventions, and file structure may all differ from your training data. Read the relevant guide in `node_modules/next/dist/docs/` before writing any code. Heed deprecation notices.
 <!-- END:nextjs-agent-rules -->
 
-# Kiryuu.id — manga reader (scraper-based)
+# Komikin-aja — manga reader (scraper-based)
 
 ## Commands
 - `npm run dev` — dev server
@@ -17,7 +17,7 @@ This version has breaking changes — APIs, conventions, and file structure may 
 **Next.js 16 canary** + **React 19** + **Tailwind v4** (`@import "tailwindcss"` in CSS, no `tailwind.config.*`).
 App Router. Most pages are `async` server components.
 
-**All data** is scraped from `DOMAIN_KIRYUU` env var (default: `https://v6.kiryuu.to/`) via `axios` + `cheerio` in `src/lib/scraper.ts`. No database, no CMS API.
+**All data** is scraped from `DOMAIN_KOMIK` env var (default: `https://v6.kiryuu.to/`) via `axios` + `cheerio` in `src/lib/scraper.ts`. No database, no CMS API.
 
 ## Cloudflare
 
@@ -49,4 +49,4 @@ Without this cookie, all pages will show empty data or error states at runtime (
 | `app/api/` | API routes mirroring scraper functions |
 | `app/api/proxy/image/route.ts` | Image proxy endpoint |
 | `next.config.ts` | Image remote patterns + env vars |
-| `.env` | `DOMAIN_KIRYUU` (target) + `CF_COOKIE` (Cloudflare bypass) |
+| `.env` | `DOMAIN_KOMIK` (target) + `CF_COOKIE` (Cloudflare bypass) |

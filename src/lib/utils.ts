@@ -1,19 +1,3 @@
-export function getDomain(): string {
-  const domain = process.env.DOMAIN_KIRYUU
-  if (!domain) throw new Error('DOMAIN_KIRYUU tidak ditemukan di .env')
-  return domain.replace(/\/+$/, '')
-}
-
-export function getDomainH(): string {
-  return getDomainsH()[0]
-}
-
-export function getDomainsH(): string[] {
-  const raw = process.env.DOMAIN_KOMIK_H || process.env['DOMAIN_KOMIK_H']
-  if (!raw) throw new Error('DOMAIN_KOMIK_H tidak ditemukan di .env')
-  return raw.split(',').map(d => d.trim().replace(/\/+$/, '')).filter(Boolean)
-}
-
 export function isHSlug(slug: string): boolean {
   return slug.startsWith('h-')
 }
@@ -30,6 +14,27 @@ export function extractSlug(url: string | undefined): string {
 
 export function sanitizeHtml(text: string): string {
   return text.replace(/<[^>]*>/g, '').trim()
+}
+
+/**
+ * API sumber utama mengembalikan waktu ISO (`2026-09-26T01:33:46.526Z`), sementara
+ * sumber kedua sudah berupa teks siap tampil. Ubah ISO jadi "26 Sep 2026" supaya
+ * daftar chapter konsisten dan rapi.
+ */
+export function formatDate(value: string | undefined | null): string | undefined {
+  if (!value) return undefined
+  const text = value.trim()
+  if (!text) return undefined
+
+  const parsed = new Date(text)
+  if (Number.isNaN(parsed.getTime())) return text
+
+  const months = [
+    'Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun',
+    'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des',
+  ]
+  const day = String(parsed.getUTCDate()).padStart(2, '0')
+  return `${day} ${months[parsed.getUTCMonth()]} ${parsed.getUTCFullYear()}`
 }
 
 export function slugify(text: string): string {

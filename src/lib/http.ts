@@ -1,0 +1,88 @@
+import axios from "axios";
+import type { AxiosResponse } from "axios";
+
+export const BROWSER_UA =
+  "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36";
+
+const client = axios.create({
+  timeout: 20_000,
+  maxRedirects: 6,
+  headers: {
+    "User-Agent": BROWSER_UA,
+    "Accept-Language": "id-ID,id;q=0.9,en-US;q=0.8,en;q=0.7",
+  },
+});
+
+export interface TextResponse {
+  body: string;
+  /** URL setelah semua redirect, dipakai sebagai "domain aktif" berikutnya. */
+  finalUrl: string;
+}
+
+function finalUrlOf(res: AxiosResponse, fallback: string): string {
+  const raw = (res.request as { res?: { responseUrl?: string } } | undefined)?.res
+    ?.responseUrl;
+  return typeof raw === "string" && raw ? raw : fallback;
+}
+
+export async function getText(url: string, timeout = 20_000): Promise<TextResponse> {
+  const res = await client.get<string>(url, {
+    timeout,
+    responseType: "text",
+    transformResponse: [(data) => data],
+    headers: {
+      Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+    },
+  });
+  const body = typeof res.data === "string" ? res.data : String(res.data ?? "");
+  return { body, finalUrl: finalUrlOf(res, url) };
+}
+
+export async function getJson<T>(url: string, timeout = 20_000): Promise<T> {
+  const res = await client.get<T>(url, { timeout, responseType: "json" });
+  return res.data;
+}
+
+/**
+ * Error ini bisa diperbaiki dengan me-resolve ulang domain, jadi layak dicoba ulang.
+ * Error HTTP 4xx (404, 403, dll) dianggap permanen.
+ */
+export function isTransientError(err: unknown): boolean {
+  const response = (err as { response?: { status?: number } } | undefined)?.response;
+  if (!response) return true;
+  const status = response.status;
+  return typeof status !== "number" || status >= 500;
+}
+
+export function toOrigin(url: string): string {
+  try {
+    return new URL(url).origin;
+  } catch {
+    return url.replace(/\/+$/, "");
+  }
+}
+
+/** Jalankan task dengan batas konkurensi supaya server sumber tidak dibanjiri. */
+export async function mapWithConcurrency<T, R>(
+  items: T[],
+  limit: number,
+  worker: (item: T, index: number) => Promise<R>,
+): Promise<R[]> {
+  const results = new Array<R>(items.length);
+  let cursor = 0;
+
+  const runners = Array.from({ length: Math.max(1, Math.min(limit, items.length)) }, async () => {
+    for (;;) {
+      const index = cursor++;
+      if (index >= items.length) return;
+      try {
+        results[index] = await worker(items[index], index);
+      } catch {
+        results[index] = undefined as R;
+      }
+    }
+  });
+
+  await Promise.all(runners);
+  return results;
+}
