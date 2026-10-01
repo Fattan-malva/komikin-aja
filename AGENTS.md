@@ -52,7 +52,9 @@ Vercel-serverless safe: no `child_process`/`curl` (the old `execSync('curl')` in
 - **`connection()` from `next/server`** must be called in dynamic pages that fetch external data to prevent unwanted static generation.
 - **Image proxy**: all external manga images go through `/api/proxy/image?url=...` (avoids CORS). Use `proxyImage()` from `src/lib/utils.ts`.
 - **Client-side persistence**: bookmarks + history in `localStorage` via `src/lib/storage.ts` (only works in `'use client'` components).
-- **Root layout** is `'use client'` (uses `usePathname`). Child pages remain server components by default.
+- **Root layout is a server component** (`app/layout.tsx`) so it can export `metadata` + `viewport`. Do not add `'use client'` to it; put interactivity in child components.
+- **iOS web app quirk**: Next 16 canary's `appleWebApp.capable` renders `mobile-web-app-capable` (missing the `apple-` prefix), which iOS ignores. `app/layout.tsx` injects the correct tag through `metadata.other` — don't remove it.
+- **App icons** are generated from `app/favicon.ico` (which is actually an 873×873 PNG with transparent corners) and flattened onto `#0a0a0f`, because iOS renders transparency as black. `app/apple-icon.png` and `app/icon.png` use Next's file convention; `app/manifest.ts` serves the web app manifest.
 
 ## Key files
 
@@ -67,6 +69,8 @@ Vercel-serverless safe: no `child_process`/`curl` (the old `execSync('curl')` in
 | `src/types/index.ts` | Shared TypeScript interfaces (`Komik`, `Chapter`, `ChapterDetail`, …) |
 | `app/api/` | API routes mirroring scraper functions |
 | `app/api/proxy/image/route.ts` | Image proxy endpoint |
+| `app/manifest.ts` | Web app manifest (`/manifest.webmanifest`) |
+| `app/apple-icon.png`, `app/icon.png` | Next file-convention icons (auto-injected `<link>` tags) |
 | `next.config.ts` | Image remote patterns only (env vars are read at runtime, not inlined) |
 | `.env` | `DOMAIN_KOMIK` + `DOMAIN_KOMIK_H` (main domains — nothing else) |
 

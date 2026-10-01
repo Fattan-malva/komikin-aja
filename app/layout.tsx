@@ -36,6 +36,14 @@ export const metadata: Metadata = {
   },
   formatDetection: { telephone: false },
 
+  // PENTING - workaround bug Next.js 16 canary.
+  // `appleWebApp.capable` hanya menghasilkan meta `mobile-web-app-capable`
+  // (tanpa awalan `apple-`) sehingga tidak dikenali iOS. Tanpa tag di bawah
+  // ini, "Add to Home Screen" TIDAK akan membuka situs sebagai web app.
+  other: {
+    "apple-mobile-web-app-capable": "yes",
+  },
+
   // app/icon.png dan app/apple-icon.png Next suntikkan otomatis lewat file
   // convention, tapi apple-touch-icon ditulis eksplisit supaya urutan tagnya
   // pasti benar di Safari.
