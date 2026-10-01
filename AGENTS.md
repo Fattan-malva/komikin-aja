@@ -17,17 +17,33 @@ This version has breaking changes — APIs, conventions, and file structure may 
 **Next.js 16 canary** + **React 19** + **Tailwind v4** (`@import "tailwindcss"` in CSS, no `tailwind.config.*`).
 App Router. Most pages are `async` server components.
 
-**All data** is scraped from `DOMAIN_KOMIK` env var (default: `https://v6.kiryuu.to/`) via `axios` + `cheerio` in `src/lib/scraper.ts`. No database, no CMS API.
+**All data** is scraped at runtime from two **main-domain** env vars — never hardcode subdomains, they get banned.
 
-## Cloudflare
+| Var | Value | Kind |
+|---|---|---|
+| `DOMAIN_KOMIK` | `https://cosmictoon.to/` | Cosmic — SvelteKit SPA + public JSON API |
+| `DOMAIN_KOMIK_H` | `https://manhwadesu.com/` | WordPress "mangareader" theme |
 
-`v6.kiryuu.to` is behind Cloudflare Managed Challenge (Turnstile). The scraper will get 403 errors unless you provide a valid `cf_clearance` cookie. To fix:
+## Domain resolution (the important part)
 
-1. Open `https://v6.kiryuu.to/` in a regular browser, solve the Cloudflare challenge
-2. Open DevTools → Application → Cookies → copy `cf_clearance` value
-3. Set it in `.env`: `CF_COOKIE=cf_clearance=...`
+The env vars hold **landing pages**, not the reader sites. `src/lib/resolve.ts` follows the "Baca Komik" / "Website Utama" link to find the live subdomain, caches it 30 min, and re-resolves on network errors. **Never hardcode `04.cosmicscans.to`, `manhwadesu.wiki`, or the API base.**
 
-Without this cookie, all pages will show empty data or error states at runtime (but the build still succeeds).
+- Fingerprints: `/_app/immutable/` → `cosmic`; `listupd`/`eplister`/`ts_reader` → `wordpress`.
+- The resolver takes an **expected kind** so a landing page's other menu entries (e.g. "Baca Novel") are rejected even when their fingerprint matches.
+- Redirects are **explicit BFS hops**, not followed by axios — some shortlinks answer 302 in 60 ms but hang for 30 s if you follow the chain.
+- `?redirect=` params are expanded at enqueue time, so a Cloudflare challenge page never has to respond.
+- Cosmic's API base isn't in the HTML: it is found by walking the bounded SvelteKit bundle import graph and probing `/v1/manga/popularToday`.
+- `RESOLVE_DEBUG=1` prints the whole traversal; `/api/resolve-debug` returns that same traversal as JSON for a deployed environment.
+- Failures are absorbed, not thrown: a host that errors once is retried (`PROBE_RETRIES`), and the whole traversal is retried once (`RESOLVE_ATTEMPTS`) before giving up. Both are bounded by `RESOLVE_DEADLINE`. Note `sleep()` must **not** call `unref()` — an unref'd timer lets the process exit before the retry runs.
+- If the host's egress IP is blocked, auto-discovery cannot read the SPA shell (and therefore cannot find the API base). Optional overrides `COSMIC_API_BASE` / `DOMAIN_KOMIK_H_ORIGIN` are a last resort — they are **liveness-probed before use** and logged via `console.warn`, never silently applied.
+
+## No Cloudflare cookie
+
+There is no `CF_COOKIE` / `FlareSolverr` anymore. `src/lib/scraper.ts` hits the JSON API on the API CDN host, which is not behind the challenge.
+
+## Deploy
+
+Vercel-serverless safe: no `child_process`/`curl` (the old `execSync('curl')` in the H scraper is gone — use `axios` from `src/lib/http.ts`). Data routes are all `ƒ` (on-demand), so `next build` never touches the network.
 
 ## Critical quirks (will cause errors if missed)
 
@@ -42,11 +58,24 @@ Without this cookie, all pages will show empty data or error states at runtime (
 
 | Path | Role |
 |---|---|
-| `src/lib/scraper.ts` | All scraping logic (573 lines) |
-| `src/lib/utils.ts` | Domain helper, proxy, slug utils |
+| `src/lib/resolve.ts` | Dynamic domain resolver (landing page → live subdomain → Cosmic API base) |
+| `src/lib/http.ts` | Shared `axios` client: `getText` / `getJson` / `probe` (no-redirect), `mapWithConcurrency` |
+| `src/lib/scraper.ts` | Cosmic JSON API scraper (`getHome`, `getDetail`, `getChapterImages`, `searchKomik`, `getGenre*`) |
+| `src/lib/scrapper-h.ts` | WordPress/mangareader scraper (`searchKomikH`, `getDetailH`, `getChapterImagesH`, `getGenreH`) |
+| `src/lib/utils.ts` | Slug helpers, image proxy URLs, `formatDate`, `computeRelevance` |
 | `src/lib/storage.ts` | localStorage bookmarks/history |
-| `src/types/index.ts` | Shared TypeScript interfaces |
+| `src/types/index.ts` | Shared TypeScript interfaces (`Komik`, `Chapter`, `ChapterDetail`, …) |
 | `app/api/` | API routes mirroring scraper functions |
 | `app/api/proxy/image/route.ts` | Image proxy endpoint |
-| `next.config.ts` | Image remote patterns + env vars |
-| `.env` | `DOMAIN_KOMIK` (target) + `CF_COOKIE` (Cloudflare bypass) |
+| `next.config.ts` | Image remote patterns only (env vars are read at runtime, not inlined) |
+| `.env` | `DOMAIN_KOMIK` + `DOMAIN_KOMIK_H` (main domains — nothing else) |
+
+## Known data quirks
+
+- ~15% of Cosmic list entries have **no cover** (`cover: null`). `SafeImage` must never render `src=""` — React throws on it. It falls back to a placeholder div.
+- `ChapterList` renders `chapter.title`, not `chapter.number`. The Cosmic scraper synthesises `title` as `Chapter <number>` because that endpoint sends no label.
+- `mangaDetail` does **not** return `type`; only `filter`/`latest` results do.
+- The Cosmic API is **cursor**-paged (`after=`/`before=`), not page-numbered. `scraper.ts` walks and caches the cursor chain per query.
+- Cosmic `/v1/manga/search` matches phrases literally (`one piece` → 2 hits), so `searchKomik` falls back to per-token queries and ranks client-side.
+- `genres_slug` with an unknown slug is silently ignored by the API, so `getGenre` validates page 1 actually contains the genre.
+- WordPress lazy-loads covers: `src` is a placeholder SVG, the real URL is in `data-lazy-src`.

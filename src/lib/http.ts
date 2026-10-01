@@ -48,6 +48,12 @@ export interface ProbeResponse {
   body: string;
   /** URL absolut tujuan redirect (3xx), kalau ada. */
   location?: string;
+  headers: Record<string, string>;
+}
+
+function headerValue(value: unknown): string {
+  if (Array.isArray(value)) return String(value[0] ?? "");
+  return typeof value === "string" ? value : "";
 }
 
 /**
@@ -81,7 +87,17 @@ export async function probe(
     }
   }
 
-  return { status: res.status, body, location };
+  return {
+    status: res.status,
+    body,
+    location,
+    headers: {
+      server: headerValue(res.headers["server"]),
+      "cf-mitigated": headerValue(res.headers["cf-mitigated"]),
+      "cf-ray": headerValue(res.headers["cf-ray"]),
+      "content-type": headerValue(res.headers["content-type"]),
+    },
+  };
 }
 
 /**

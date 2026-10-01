@@ -25,9 +25,12 @@ const MAX_DEPTH = 2;
 const MAX_PROBES = 24;
 const MAX_QUEUE = 40;
 const WORKERS = 4;
-const PROBE_TIMEOUT = 6_000;
+const PROBE_TIMEOUT = 5_000;
 /** Batas total supaya fungsi serverless tidak menggantung saat cache kosong. */
-const RESOLVE_DEADLINE = 15_000;
+const RESOLVE_DEADLINE = 10_000;
+/** Satu host gagal sekali belum berarti mati - coba lagi sebelum menyerah. */
+const PROBE_RETRIES = 1;
+const RESOLVE_ATTEMPTS = 2;
 const MAX_BUNDLE_FILES = 16;
 const BUNDLE_FETCH_WIDTH = 6;
 const MAX_API_CANDIDATES = 8;
@@ -372,20 +375,34 @@ interface FetchedPage {
   body: string;
   /** Kalau server membalas 3xx, tujuan redirect-nya (masih satu hop logis). */
   redirectTo?: string;
+  status: number;
+  headers: Record<string, string>;
 }
 
 async function fetchPage(url: string): Promise<FetchedPage | null> {
   try {
     const res = await probe(url, PROBE_TIMEOUT);
     if (res.status >= 300 && res.status < 400) {
-      return { body: "", redirectTo: res.location };
+      return { body: "", redirectTo: res.location, status: res.status, headers: res.headers };
     }
     if (res.status < 200 || res.status >= 300) return null;
-    return { body: res.body };
-  } catch {
+    return { body: res.body, status: res.status, headers: res.headers };
+  } catch (err) {
+    const code = (err as { code?: string } | undefined)?.code ?? "";
+    lastError = err instanceof Error ? `${code} ${err.message}`.trim() : String(err);
     return null;
   }
 }
+
+/** Error request terakhir, dipakai untuk pesan kegagalan yang lebih jelas. */
+let lastError = "";
+
+// Sengaja tanpa `unref()`: timer ini wajib menjadwalkan percobaan berikutnya,
+// kalau tidak process bisa keluar sebelum retry sempat jalan.
+const sleep = (ms: number) =>
+  new Promise<void>((resolve) => {
+    setTimeout(resolve, ms);
+  });
 
 /**
  * Penelusuran breadth-first yang berjalan konkurens: begitu satu kandidat
@@ -399,8 +416,13 @@ async function fetchPage(url: string): Promise<FetchedPage | null> {
 async function resolveFromEntry(
   entry: string,
   expected: SourceKind,
+  log?: (message: string) => void,
 ): Promise<ResolvedSource> {
   const started = Date.now();
+  const say = (message: string) => {
+    if (log) log(`[${Date.now() - started}ms] ${message}`);
+    else trace(message);
+  };
   const state: { match: ResolvedSource | null; priority: boolean } = {
     match: null,
     priority: false,
@@ -424,7 +446,7 @@ async function resolveFromEntry(
     if (state.match && !(priority && !state.priority)) return;
     state.match = source;
     state.priority = priority;
-    trace(`! MATCH ${source.origin} (${source.kind})`);
+    say(`! MATCH ${source.origin} (${source.kind}) api=${source.apiBase}`);
     wake();
   };
 
@@ -440,7 +462,7 @@ async function resolveFromEntry(
     if (seen.size >= MAX_PROBES || queue.length >= MAX_QUEUE) return;
     seen.add(url);
     queue.push({ url, depth, priority });
-    trace(`+ enqueue d${depth}${priority ? " *" : "  "} ${url}`);
+    say(`+ enqueue d${depth}${priority ? " *" : "  "} ${url}`);
 
     let parsed: URL;
     try {
@@ -474,24 +496,38 @@ async function resolveFromEntry(
     depth: number,
     priority: boolean,
   ): Promise<void> => {
-    trace(`> visit   d${depth} ${url}`);
-    const page = await fetchPage(url);
+    say(`> visit   d${depth} ${url}`);
+    let page = await fetchPage(url);
     if (!page) {
-      trace(`x unreachable ${url}`);
+      // Host yang biasanya sehat kadang gagal sekali karena koneksi baru
+      // masih buildup atau Cloudflare yang rate-limit. Coba lagi sebelum menyerah.
+      for (let retry = 0; retry < PROBE_RETRIES; retry++) {
+        if (Date.now() >= started + RESOLVE_DEADLINE) break;
+        await sleep(250);
+        page = await fetchPage(url);
+        if (page) break;
+      }
+    }
+    if (!page) {
+      say(`x unreachable ${url} (${lastError || "no response"})`);
       return;
     }
     if (state.match) return;
 
     // Redirect bukan lapis penelusuran baru, jadi kedalaman tidak bertambah.
     if (page.redirectTo) {
-      trace(`  -> 302 ${page.redirectTo}`);
+      say(`  -> 302 ${page.redirectTo}`);
       enqueue(page.redirectTo, depth, priority);
       return;
     }
 
     const kind = detectKind(page.body);
     const origin = toOrigin(url);
-    trace(`  -> ${url}  kind=${kind ?? "none"} len=${page.body.length}`);
+    say(
+      `  -> ${url}\n     status=${page.status} len=${page.body.length} kind=${kind ?? "none"} expected=${expected}` +
+        `\n     cf-mitigated=${page.headers["cf-mitigated"] || "-"} cf-ray=${page.headers["cf-ray"] ? "yes" : "-"} server=${page.headers["server"] || "-"}` +
+        `\n     has_immutable=${page.body.includes("/_app/immutable/")} title=${/<title[^>]*>([^<]{0,60})/i.exec(page.body)?.[1] ?? "-"}`,
+    );
 
     if (kind === "wordpress") {
       if (expected === "wordpress") {
@@ -578,22 +614,118 @@ async function resolveSource(
   const pending = inflight.get(cacheKey);
   if (pending) return pending;
 
-  const task = resolveFromEntry(entry, expected)
-    .then((source) => {
-      cache.set(cacheKey, source);
-      return source;
-    })
-    .finally(() => {
-      inflight.delete(cacheKey);
-    });
+  const task = (async () => {
+    let lastErr: unknown;
+
+    for (let attempt = 1; attempt <= RESOLVE_ATTEMPTS; attempt++) {
+      try {
+        const source = await resolveFromEntry(entry, expected);
+        cache.set(cacheKey, source);
+        return source;
+      } catch (err) {
+        lastErr = err;
+        if (attempt < RESOLVE_ATTEMPTS) {
+          trace(`gagal (percobaan ${attempt}), mengulang...`);
+          await sleep(400);
+        }
+      }
+    }
+
+    // Kalau penelusuran otomatis gagal (mis. IP server ikut di-block
+    // Cloudflare), pakai nilai cadangan yang dikonfigurasi manual - tapi
+    // hanya kalau nilainya benar-benar masih hidup.
+    const fallback = await buildFromOverride(envKey, expected);
+    if (fallback) {
+      console.warn(
+        `[resolve] ${envKey}: penelusuran otomatis gagal, memakai ${OVERRIDE_KEYS[envKey]}=${fallback.apiBase}`,
+      );
+      cache.set(cacheKey, fallback);
+      return fallback;
+    }
+
+    throw lastErr;
+  })().finally(() => {
+    inflight.delete(cacheKey);
+  });
 
   inflight.set(cacheKey, task);
   return task;
 }
 
+/**
+ * Nilai cadangan opsional. Auto-deteksi tetap jadi jalur utama; ini cuma
+ * jaring pengaman untuk environment yang IP-nya diblokir sumber.
+ */
+const OVERRIDE_KEYS: Record<string, string> = {
+  DOMAIN_KOMIK: "COSMIC_API_BASE",
+  DOMAIN_KOMIK_H: "DOMAIN_KOMIK_H_ORIGIN",
+};
+
+async function buildFromOverride(
+  envKey: string,
+  expected: SourceKind,
+): Promise<ResolvedSource | null> {
+  const overrideKey = OVERRIDE_KEYS[envKey];
+  const raw = overrideKey ? (process.env[overrideKey] ?? "").trim() : "";
+  if (!raw) return null;
+
+  const value = toOrigin(raw);
+  const entry = getSourceEntry(envKey);
+
+  if (expected === "cosmic") {
+    if (!(await probeCosmicApi(value))) return null;
+    return {
+      entry,
+      origin: value,
+      apiBase: value,
+      kind: "cosmic",
+      resolvedAt: Date.now(),
+    };
+  }
+
+  return {
+    entry,
+    origin: value,
+    apiBase: value,
+    kind: "wordpress",
+    resolvedAt: Date.now(),
+  };
+}
+
 export function invalidateSource(envKey: string): void {
   const entry = (process.env[envKey] || "").trim();
   cache.delete(`${envKey}:${toOrigin(entry)}`);
+}
+
+/**
+ * Jalankan penelusuran dari nol sambil mengumpulkan lognya. Dipakai endpoint
+ * `/api/resolve-debug` untuk melihat kenapa sebuah sumber tidak ditemukan di
+ * server tertentu (mis. IP datacenter vs IP rumah).
+ */
+export async function debugResolve(envKey: string): Promise<{
+  envKey: string;
+  expected: SourceKind;
+  resolved: ResolvedSource | null;
+  error: string | null;
+  log: string[];
+}> {
+  const expected: SourceKind =
+    envKey === "DOMAIN_KOMIK_H" ? "wordpress" : "cosmic";
+  const entry = getSourceEntry(envKey);
+  const log: string[] = [];
+
+  try {
+    const source = await resolveFromEntry(entry, expected, (m) => log.push(m));
+    return { envKey, expected, resolved: source, error: null, log };
+  } catch (err) {
+    return {
+      envKey,
+      expected,
+      resolved: null,
+      error: err instanceof Error ? err.message : String(err),
+      log,
+    };
+  }
 }
 
 export function resolvePrimarySource(): Promise<ResolvedSource> {
