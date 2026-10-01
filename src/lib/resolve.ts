@@ -1,4 +1,4 @@
-import { getJson, getText, toOrigin, type TextResponse } from "./http";
+import { getJson, getText, probe, toOrigin } from "./http";
 
 /**
  * Sumber data dibaca dari domain UTAMA yang ada di .env (mis. cosmictoon.to).
@@ -25,15 +25,21 @@ const MAX_DEPTH = 2;
 const MAX_PROBES = 24;
 const MAX_QUEUE = 40;
 const WORKERS = 4;
-const PROBE_TIMEOUT = 8_000;
+const PROBE_TIMEOUT = 6_000;
 /** Batas total supaya fungsi serverless tidak menggantung saat cache kosong. */
-const RESOLVE_DEADLINE = 20_000;
+const RESOLVE_DEADLINE = 15_000;
 const MAX_BUNDLE_FILES = 16;
 const BUNDLE_FETCH_WIDTH = 6;
 const MAX_API_CANDIDATES = 8;
 
 const cache = new Map<string, ResolvedSource>();
 const inflight = new Map<string, Promise<ResolvedSource>>();
+
+/** Setel RESOLVE_DEBUG=1 untuk melihat_alur penelusuran di log server. */
+const TRACE = process.env.RESOLVE_DEBUG === "1";
+const trace = (message: string) => {
+  if (TRACE) console.log(`[resolve:${new Date().toISOString().slice(11, 23)}] ${message}`);
+};
 
 /* ------------------------------------------------------------------ *
  * Pembersih kandidat tautan
@@ -362,9 +368,20 @@ async function discoverCosmicApi(origin: string, html: string): Promise<string |
  * Resolusi
  * ------------------------------------------------------------------ */
 
-async function fetchPage(url: string): Promise<TextResponse | null> {
+interface FetchedPage {
+  body: string;
+  /** Kalau server membalas 3xx, tujuan redirect-nya (masih satu hop logis). */
+  redirectTo?: string;
+}
+
+async function fetchPage(url: string): Promise<FetchedPage | null> {
   try {
-    return await getText(url, PROBE_TIMEOUT);
+    const res = await probe(url, PROBE_TIMEOUT);
+    if (res.status >= 300 && res.status < 400) {
+      return { body: "", redirectTo: res.location };
+    }
+    if (res.status < 200 || res.status >= 300) return null;
+    return { body: res.body };
   } catch {
     return null;
   }
@@ -407,7 +424,49 @@ async function resolveFromEntry(
     if (state.match && !(priority && !state.priority)) return;
     state.match = source;
     state.priority = priority;
+    trace(`! MATCH ${source.origin} (${source.kind})`);
     wake();
+  };
+
+  /**
+   * Masukkan kandidat ke antrean. Parameter `?redirect=` yang ada di URL itu
+   * sendiri langsung ikut ditembakkan sebagai kandidat prioritas, jadi kita
+   * tidak perlu menunggu halaman "pergi ke sini" merespons (biasanya berat /
+   * diblokir Cloudflare) hanya untuk membaca parametermya.
+   */
+  const enqueue = (url: string, depth: number, priority: boolean) => {
+    if (depth > MAX_DEPTH + 1) return;
+    if (seen.has(url) || toOrigin(url) === entry) return;
+    if (seen.size >= MAX_PROBES || queue.length >= MAX_QUEUE) return;
+    seen.add(url);
+    queue.push({ url, depth, priority });
+    trace(`+ enqueue d${depth}${priority ? " *" : "  "} ${url}`);
+
+    let parsed: URL;
+    try {
+      parsed = new URL(url);
+    } catch {
+      return;
+    }
+    for (const param of REDIRECT_PARAMS) {
+      for (const raw of parsed.searchParams.getAll(param)) {
+        let target = raw;
+        try {
+          target = decodeURIComponent(raw);
+        } catch {
+          target = raw;
+        }
+        if (!target) continue;
+        let targetUrl: URL;
+        try {
+          targetUrl = new URL(target, parsed);
+        } catch {
+          continue;
+        }
+        if (isJunkCandidate(targetUrl)) continue;
+        enqueue(targetUrl.toString(), depth, true);
+      }
+    }
   };
 
   const visit = async (
@@ -415,11 +474,24 @@ async function resolveFromEntry(
     depth: number,
     priority: boolean,
   ): Promise<void> => {
+    trace(`> visit   d${depth} ${url}`);
     const page = await fetchPage(url);
-    if (!page || state.match) return;
+    if (!page) {
+      trace(`x unreachable ${url}`);
+      return;
+    }
+    if (state.match) return;
+
+    // Redirect bukan lapis penelusuran baru, jadi kedalaman tidak bertambah.
+    if (page.redirectTo) {
+      trace(`  -> 302 ${page.redirectTo}`);
+      enqueue(page.redirectTo, depth, priority);
+      return;
+    }
 
     const kind = detectKind(page.body);
-    const origin = toOrigin(page.finalUrl);
+    const origin = toOrigin(url);
+    trace(`  -> ${url}  kind=${kind ?? "none"} len=${page.body.length}`);
 
     if (kind === "wordpress") {
       if (expected === "wordpress") {
@@ -429,7 +501,7 @@ async function resolveFromEntry(
     }
 
     if (kind === "cosmic") {
-      const apiBase = await discoverCosmicApi(page.finalUrl, page.body);
+      const apiBase = await discoverCosmicApi(url, page.body);
       if (apiBase && expected === "cosmic") {
         accept(
           { entry, origin, apiBase, kind, resolvedAt: Date.now() },
@@ -442,7 +514,7 @@ async function resolveFromEntry(
     // Bukan situs komik: coba satu lapis lebih dalam lewat tombol/menu.
     if (depth >= MAX_DEPTH) return;
 
-    const next = extractCandidates(page.body, page.finalUrl)
+    const next = extractCandidates(page.body, url)
       .filter((item) => !seen.has(item.url) && toOrigin(item.url) !== entry)
       .sort((a, b) => Number(b.priority) - Number(a.priority));
 
@@ -450,12 +522,7 @@ async function resolveFromEntry(
       if (state.match || seen.size >= MAX_PROBES || queue.length >= MAX_QUEUE) {
         break;
       }
-      seen.add(item.url);
-      queue.push({
-        url: item.url,
-        depth: depth + 1,
-        priority: item.priority,
-      });
+      enqueue(item.url, depth + 1, item.priority);
     }
   };
 

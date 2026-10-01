@@ -43,6 +43,47 @@ export async function getJson<T>(url: string, timeout = 20_000): Promise<T> {
   return res.data;
 }
 
+export interface ProbeResponse {
+  status: number;
+  body: string;
+  /** URL absolut tujuan redirect (3xx), kalau ada. */
+  location?: string;
+}
+
+/**
+ * Fetch satu hop tanpa mengikuti redirect. Dipakai resolver saat menelusuri
+ * domain: beberapa shortlink menjawab 302 dalam milidetik tapi_chain mengikuti
+ * redirect-nya justru menggantung puluhan detik.
+ */
+export async function probe(
+  url: string,
+  timeout = 10_000,
+): Promise<ProbeResponse> {
+  const res = await client.get<string>(url, {
+    timeout,
+    maxRedirects: 0,
+    responseType: "text",
+    transformResponse: [(data) => data],
+    validateStatus: () => true,
+    headers: { Accept: "text/html,application/xhtml+xml,*/*;q=0.8" },
+  });
+
+  const body = typeof res.data === "string" ? res.data : "";
+  const raw = res.headers["location"];
+  const rawLocation = Array.isArray(raw) ? raw[0] : raw;
+
+  let location: string | undefined;
+  if (typeof rawLocation === "string" && rawLocation.trim()) {
+    try {
+      location = new URL(rawLocation, url).toString();
+    } catch {
+      location = undefined;
+    }
+  }
+
+  return { status: res.status, body, location };
+}
+
 /**
  * Error ini bisa diperbaiki dengan me-resolve ulang domain, jadi layak dicoba ulang.
  * Error HTTP 4xx (404, 403, dll) dianggap permanen.
