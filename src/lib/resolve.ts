@@ -385,7 +385,13 @@ async function fetchPage(url: string): Promise<FetchedPage | null> {
     if (res.status >= 300 && res.status < 400) {
       return { body: "", redirectTo: res.location, status: res.status, headers: res.headers };
     }
-    if (res.status < 200 || res.status >= 300) return null;
+    if (res.status < 200 || res.status >= 300) {
+      // Penting: catat statusnya. Cloudflare membalas 403/521/523 dengan
+      // sangat cepat, jadi ini yang membedakan "diblokir" dari "timeout".
+      const title = /<title[^>]*>([^<]{0,60})/i.exec(res.body)?.[1]?.trim();
+      lastError = `HTTP ${res.status}${title ? ` (${title})` : ""}`;
+      return null;
+    }
     return { body: res.body, status: res.status, headers: res.headers };
   } catch (err) {
     const code = (err as { code?: string } | undefined)?.code ?? "";
@@ -428,6 +434,7 @@ async function resolveFromEntry(
     priority: false,
   };
   const seen = new Set<string>([entry]);
+  const visited = new Set<string>([entry]);
   const queue: Array<{ url: string; depth: number; priority: boolean }> = [
     { url: entry, depth: 0, priority: true },
   ];
@@ -523,6 +530,7 @@ async function resolveFromEntry(
 
     const kind = detectKind(page.body);
     const origin = toOrigin(url);
+    visited.add(origin);
     say(
       `  -> ${url}\n     status=${page.status} len=${page.body.length} kind=${kind ?? "none"} expected=${expected}` +
         `\n     cf-mitigated=${page.headers["cf-mitigated"] || "-"} cf-ray=${page.headers["cf-ray"] ? "yes" : "-"} server=${page.headers["server"] || "-"}` +
@@ -580,6 +588,25 @@ async function resolveFromEntry(
 
     await Promise.race([matched, deadline, ...active]);
     if (Date.now() >= started + RESOLVE_DEADLINE) break;
+  }
+
+  // Rencana B: kalau shell SPA-nya tidak bisa diambil (mis. diblokir Cloudflare
+  // untuk IP datacenter) tapi API-nya dilayani dari host yang sama, kita masih
+  // bisa jalan tanpa perlu membaca bundle sama sekali.
+  if (!state.match && expected === "cosmic") {
+    const hosts = [...visited].slice(0, 6);
+    const results = await Promise.all(hosts.map((h) => probeCosmicApi(h)));
+    const hit = hosts.find((_, i) => results[i]);
+    if (hit) {
+      say(`! MATCH (fallback API) ${hit}`);
+      return {
+        entry,
+        origin: hit,
+        apiBase: hit,
+        kind: "cosmic",
+        resolvedAt: Date.now(),
+      };
+    }
   }
 
   return (
