@@ -642,6 +642,20 @@ async function resolveSource(
   if (pending) return pending;
 
   const task = (async () => {
+    // 1) Nilai cadangan (kalau diisi) dicoba lebih dulu: ini host API-nya
+    //    langsung, jadi tidak perlu menembus halaman challenge Cloudflare
+    //    seperti auto-deteksi. Tetap diuji kelayakannya dulu, dan kalau
+    //    sudah mati otomatis jatuh ke auto-deteksi.
+    const override = await buildFromOverride(envKey, expected);
+    if (override) {
+      console.warn(
+        `[resolve] ${envKey}: memakai ${OVERRIDE_KEYS[envKey]}=${override.apiBase} (auto-deteksi dilewati)`,
+      );
+      cache.set(cacheKey, override);
+      return override;
+    }
+
+    // 2) Auto-deteksi: telusuri tombol di landing page sampai ketemu.
     let lastErr: unknown;
 
     for (let attempt = 1; attempt <= RESOLVE_ATTEMPTS; attempt++) {
@@ -656,18 +670,6 @@ async function resolveSource(
           await sleep(400);
         }
       }
-    }
-
-    // Kalau penelusuran otomatis gagal (mis. IP server ikut di-block
-    // Cloudflare), pakai nilai cadangan yang dikonfigurasi manual - tapi
-    // hanya kalau nilainya benar-benar masih hidup.
-    const fallback = await buildFromOverride(envKey, expected);
-    if (fallback) {
-      console.warn(
-        `[resolve] ${envKey}: penelusuran otomatis gagal, memakai ${OVERRIDE_KEYS[envKey]}=${fallback.apiBase}`,
-      );
-      cache.set(cacheKey, fallback);
-      return fallback;
     }
 
     throw lastErr;
@@ -728,31 +730,61 @@ export function invalidateSource(envKey: string): void {
  * Jalankan penelusuran dari nol sambil mengumpulkan lognya. Dipakai endpoint
  * `/api/resolve-debug` untuk melihat kenapa sebuah sumber tidak ditemukan di
  * server tertentu (mis. IP datacenter vs IP rumah).
+ *
+ * Melaporkan tiga hal terpisah supaya tidak menyesatkan: auto-deteksi, status
+ * nilai cadangan, dan hasil efektif yang benar-benar dipakai aplikasi.
  */
 export async function debugResolve(envKey: string): Promise<{
   envKey: string;
   expected: SourceKind;
-  resolved: ResolvedSource | null;
-  error: string | null;
-  log: string[];
+  override: { key: string; configured: string | null; alive: boolean | null };
+  auto: { resolved: ResolvedSource | null; error: string | null; log: string[] };
+  effective: { resolved: ResolvedSource | null; error: string | null };
 }> {
   const expected: SourceKind =
     envKey === "DOMAIN_KOMIK_H" ? "wordpress" : "cosmic";
+  const overrideKey = OVERRIDE_KEYS[envKey] ?? "";
+  const configured = (process.env[overrideKey] ?? "").trim() || null;
+
   const entry = getSourceEntry(envKey);
   const log: string[] = [];
 
+  let auto: { resolved: ResolvedSource | null; error: string | null };
   try {
     const source = await resolveFromEntry(entry, expected, (m) => log.push(m));
-    return { envKey, expected, resolved: source, error: null, log };
+    auto = { resolved: source, error: null };
   } catch (err) {
-    return {
-      envKey,
-      expected,
+    auto = {
       resolved: null,
       error: err instanceof Error ? err.message : String(err),
-      log,
     };
   }
+
+  let alive: boolean | null = null;
+  if (configured) {
+    alive = (await buildFromOverride(envKey, expected)) !== null;
+  }
+
+  // Hasil efektif: jalur resolveSource sungguhan (override dulu, baru
+  // auto-deteksi), setelah cache dibuang supaya benar-benar dihitung ulang.
+  invalidateSource(envKey);
+  let effective: { resolved: ResolvedSource | null; error: string | null };
+  try {
+    effective = { resolved: await resolveSource(envKey, expected), error: null };
+  } catch (err) {
+    effective = {
+      resolved: null,
+      error: err instanceof Error ? err.message : String(err),
+    };
+  }
+
+  return {
+    envKey,
+    expected,
+    override: { key: overrideKey, configured, alive },
+    auto: { ...auto, log },
+    effective,
+  };
 }
 
 export function resolvePrimarySource(): Promise<ResolvedSource> {

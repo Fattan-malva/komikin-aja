@@ -12,8 +12,23 @@ interface Props {
   searchParams: Promise<{ page?: string }>
 }
 
+/**
+ * Satu sumber mati tidak boleh menjatuhkan seluruh homepage. Komponen di
+ * bawah sudah mengembalikan null untuk daftar kosong, jadi cukup kembalikan
+ * daftar kosong dan biarkan seksi itu hilang saja.
+ */
+async function safe<T>(fn: () => Promise<T>, fallback: T): Promise<T> {
+  try {
+    return await fn()
+  } catch {
+    return fallback
+  }
+}
+
+const EMPTY: { komik: [] } = { komik: [] }
+
 async function BannerSection() {
-  const homeData = await getHome(1)
+  const homeData = await safe(() => getHome(1), EMPTY)
   const bannerManga = homeData.komik.slice(0, 5)
   const results = await Promise.allSettled(
     bannerManga.map(m => getDetail(m.slug)),
@@ -32,7 +47,7 @@ function BannerFallback() {
 }
 
 async function PopularSection() {
-  const data = await getPopular(1)
+  const data = await safe(() => getPopular(1), EMPTY)
   return <PopularScroll items={data.komik} />
 }
 
@@ -54,24 +69,24 @@ function ScrollFallback() {
 }
 
 async function ManhwaSection() {
-  const data = await getManhwa(1)
+  const data = await safe(() => getManhwa(1), EMPTY)
   return <TypeScroll items={data.komik} title="Manhwa" />
 }
 
 async function MangaSection() {
-  const data = await getManga(1)
+  const data = await safe(() => getManga(1), EMPTY)
   return <TypeScroll items={data.komik} title="Manga" />
 }
 
 async function ManhuaSection() {
-  const data = await getManhua(1)
+  const data = await safe(() => getManhua(1), EMPTY)
   return <TypeScroll items={data.komik} title="Manhua" />
 }
 
 async function LatestSection({ searchParams }: Props) {
   const { page } = await searchParams
   const currentPage = Number(page) || 1
-  const data = await getHome(currentPage)
+  const data = await safe(() => getHome(currentPage), EMPTY)
   return (
     <>
       <LatestUpdates items={data.komik} />

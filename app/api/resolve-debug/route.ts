@@ -39,8 +39,8 @@ export async function GET(request: NextRequest) {
     sample?: string;
     error?: string;
   }[] = [];
-  const primary = results[0] as { resolved?: { apiBase?: string } } | undefined;
-  const known = primary?.resolved?.apiBase ?? process.env.COSMIC_API_BASE;
+  const primary = results[0] as { effective?: { resolved?: { apiBase?: string } } } | undefined;
+  const known = primary?.effective?.resolved?.apiBase ?? process.env.COSMIC_API_BASE;
 
   if (known) {
     const url = `${known}/v1/manga/popularToday`;
