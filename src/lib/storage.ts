@@ -5,6 +5,8 @@ import type { HistoryItem } from '@/src/types'
 export const READ_CHAPTERS_KEY = 'kiryuu-read-chapters'
 
 export function getReadChapters(): Set<string> {
+  // Komponen ini juga dievaluasi saat SSR, jadi localStorage belum ada.
+  if (typeof window === 'undefined') return new Set()
   try {
     const stored = localStorage.getItem(READ_CHAPTERS_KEY)
     if (!stored) return new Set()
