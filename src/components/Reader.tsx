@@ -11,21 +11,6 @@ import {
   updateHistoryChapter,
 } from "@/src/lib/storage";
 
-declare global {
-  interface Window {
-    turnstile?: {
-      render: (container: HTMLElement, options: {
-        sitekey: string;
-        theme?: "light" | "dark" | "auto";
-        callback: (token: string) => void;
-        "error-callback"?: () => void;
-        "expired-callback"?: () => void;
-      }) => string;
-      remove?: (widgetId: string) => void;
-    };
-  }
-}
-
 interface Props {
   slug: string;
   chapterId: string;
@@ -38,84 +23,6 @@ export default function Reader({ slug, chapterId, data }: Props) {
   const [readChapters] = useState(() => getReadChapters());
   const [autoScrollEnabled, setAutoScrollEnabled] = useState(false);
   const [autoScrollSpeed, setAutoScrollSpeed] = useState(0.5);
-  const [readerImages, setReaderImages] = useState<string[]>(data.images);
-  const [readerError, setReaderError] = useState("");
-  const [readerLoading, setReaderLoading] = useState(false);
-
-  useEffect(() => {
-    setReaderImages(data.images);
-    setReaderError("");
-  }, [data.images, chapterId]);
-
-  useEffect(() => {
-    if (data.images.length > 0 || !data.pageCount || !data.turnstileSiteKey) return;
-
-    let disposed = false;
-    let widgetId: string | undefined;
-    const mountWidget = () => {
-      if (disposed || !window.turnstile) return;
-      const target = document.getElementById("cosmic-turnstile");
-      if (!target || target.childElementCount > 0) return;
-      widgetId = window.turnstile.render(target, {
-        sitekey: data.turnstileSiteKey!,
-        theme: "dark",
-        callback: async (turnstileToken) => {
-          if (disposed) return;
-          setReaderLoading(true);
-          setReaderError("");
-          try {
-            const response = await fetch(
-              `/api/komik/${encodeURIComponent(slug)}/${encodeURIComponent(chapterId)}/images`,
-              {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ turnstileToken }),
-                cache: "no-store",
-              },
-            );
-            const payload = await response.json();
-            if (!response.ok || !Array.isArray(payload.images) || payload.images.length === 0) {
-              throw new Error(payload.error || "Gagal memuat halaman komik");
-            }
-            if (!disposed) setReaderImages(payload.images);
-          } catch (error) {
-            if (!disposed) {
-              setReaderError(error instanceof Error ? error.message : "Gagal memuat halaman komik");
-            }
-          } finally {
-            if (!disposed) setReaderLoading(false);
-          }
-        },
-        "error-callback": () => {
-          if (!disposed) setReaderError("Verifikasi Cloudflare gagal. Silakan coba lagi.");
-        },
-        "expired-callback": () => {
-          if (!disposed) setReaderError("Verifikasi kedaluwarsa. Silakan verifikasi kembali.");
-        },
-      });
-    };
-
-    if (window.turnstile) {
-      mountWidget();
-    } else {
-      let script = document.querySelector<HTMLScriptElement>(
-        'script[src^="https://challenges.cloudflare.com/turnstile/v0/api.js"]',
-      );
-      if (!script) {
-        script = document.createElement("script");
-        script.src = "https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit";
-        script.async = true;
-        script.defer = true;
-        document.head.appendChild(script);
-      }
-      script.addEventListener("load", mountWidget);
-    }
-
-    return () => {
-      disposed = true;
-      if (widgetId && window.turnstile?.remove) window.turnstile.remove(widgetId);
-    };
-  }, [data.images.length, data.pageCount, data.turnstileSiteKey, slug, chapterId]);
 
   useEffect(() => {
     if (!autoScrollEnabled) return;
@@ -176,16 +83,8 @@ export default function Reader({ slug, chapterId, data }: Props) {
 
   return (
     <div className="w-full max-w-4xl mx-auto">
-      {readerImages.length === 0 && data.pageCount ? (
-        <div className="mx-auto flex min-h-64 max-w-md flex-col items-center justify-center gap-4 px-6 text-center text-white">
-          <p className="text-sm text-gray-300">Verifikasi untuk memuat {data.pageCount} halaman komik</p>
-          <div id="cosmic-turnstile" className="min-h-16" />
-          {readerLoading && <p className="text-xs text-gray-400">Memuat semua halaman...</p>}
-          {readerError && <p className="text-sm text-red-400">{readerError}</p>}
-        </div>
-      ) : null}
       <div className="space-y-0">
-        {readerImages.map((img, i) => {
+        {data.images.map((img, i) => {
           const urls = getImageUrls(img)
           return (
           <div key={i} className="w-full bg-black/20">

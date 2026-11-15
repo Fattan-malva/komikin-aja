@@ -23,8 +23,6 @@ export interface Chapter {
 
 export interface ChapterDetail {
   images: string[]
-  pageCount?: number
-  turnstileSiteKey?: string
   prev?: string
   next?: string
   chapters?: Chapter[]

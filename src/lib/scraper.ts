@@ -66,14 +66,7 @@ interface ApiChapterPage {
     chapters?: string[] | null;
     otherChapters?: ApiChapter[] | null;
     slugManga?: string | null;
-    pageCount?: number | null;
-    redirect_link?: string | null;
   } | null;
-}
-
-interface ApiImageConfig {
-  success?: boolean;
-  data?: { turnstileSiteKey?: string | null } | null;
 }
 
 interface ListResult {
@@ -376,19 +369,7 @@ export async function getChapterImages(
     if (!data) return null;
 
     const images = extractImages(data.chapters);
-    const pageCount = Number(data.pageCount ?? 0);
-    if (images.length === 0 && pageCount <= 0) return null;
-
-    // Cosmic reader baru memakai pageCount + image session; daftar halaman
-    // tidak lagi dikirim sebagai URL gambar permanen dari readingPage.
-    let turnstileSiteKey = "";
-    if (pageCount > 0) {
-      const config = await cosmic((apiBase) =>
-        getJson<ApiImageConfig>(`${apiBase}/v1/manga/img/config`),
-      );
-      turnstileSiteKey = config?.data?.turnstileSiteKey ?? "";
-      if (!turnstileSiteKey) return null;
-    }
+    if (images.length === 0) return null;
 
     // otherChapters diurutkan terbaru -> terlama.
     const chapters = toChapters(data.otherChapters);
@@ -396,8 +377,6 @@ export async function getChapterImages(
 
     return {
       images,
-      pageCount: pageCount || images.length,
-      turnstileSiteKey,
       next: index > 0 ? chapters[index - 1].slug : "",
       prev: index >= 0 ? (chapters[index + 1]?.slug ?? "") : "",
       chapters,
