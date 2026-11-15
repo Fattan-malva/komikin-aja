@@ -23,6 +23,9 @@ export default function Reader({ slug, chapterId, data }: Props) {
   const [readChapters] = useState(() => getReadChapters());
   const [autoScrollEnabled, setAutoScrollEnabled] = useState(false);
   const [autoScrollSpeed, setAutoScrollSpeed] = useState(0.5);
+  const [readerImages, setReaderImages] = useState<string[]>(data.images);
+  const [readerError, setReaderError] = useState("");
+  const [readerLoading, setReaderLoading] = useState(false);
 
   useEffect(() => {
     if (!autoScrollEnabled) return;
@@ -83,8 +86,16 @@ export default function Reader({ slug, chapterId, data }: Props) {
 
   return (
     <div className="w-full max-w-4xl mx-auto">
+      {readerImages.length === 0 && data.pageCount ? (
+        <div className="mx-auto flex min-h-64 max-w-md flex-col items-center justify-center gap-4 px-6 text-center text-white">
+          <p className="text-sm text-gray-300">Verifikasi untuk memuat {data.pageCount} halaman komik</p>
+          <div id="cosmic-turnstile" className="min-h-16" />
+          {readerLoading && <p className="text-xs text-gray-400">Memuat semua halaman...</p>}
+          {readerError && <p className="text-sm text-red-400">{readerError}</p>}
+        </div>
+      ) : null}
       <div className="space-y-0">
-        {data.images.map((img, i) => {
+        {readerImages.map((img, i) => {
           const urls = getImageUrls(img)
           return (
           <div key={i} className="w-full bg-black/20">
