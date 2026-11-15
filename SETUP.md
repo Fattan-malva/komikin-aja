@@ -80,12 +80,18 @@ tidak diam-diam.
 
 ## 2. Environment Variable
 
-File `.env` di root project cukup dua baris:
+File `.env` di root project memakai tiga variabel berikut:
 
-```
+```env
+COSMIC_API_BASE=https://cdncid.csmcscns.id
 DOMAIN_KOMIK=https://cosmictoon.to/
 DOMAIN_KOMIK_H=https://manhwadesu.com/
 ```
+
+`COSMIC_API_BASE` adalah root API/CDN Cosmic (tanpa suffix `/v1/manga`).
+Jika variabel ini diisi, resolver memvalidasi dan memakai base tersebut untuk
+API Cosmic; `DOMAIN_KOMIK` tetap menjadi domain landing page sumber utama dan
+`DOMAIN_KOMIK_H` tetap menjadi domain sumber WordPress.
 
 ## 3. Menjalankan
 
@@ -101,7 +107,9 @@ npm run start      # start production server
 Siap untuk Vercel serverless — tidak ada `child_process`/`curl`, semua request
 lewat `axios`.
 
-- Tambahkan `DOMAIN_KOMIK` dan `DOMAIN_KOMIK_H` di Environment Variables Vercel.
+- Tambahkan `COSMIC_API_BASE`, `DOMAIN_KOMIK`, dan `DOMAIN_KOMIK_H` di Environment Variables Vercel untuk environment yang dipakai.
+- Chapter Cosmic ditampilkan melalui reader resmi `https://04.cosmicscans.to` di dalam iframe. Ini membuat Turnstile berjalan pada hostname yang diizinkan pemilik site key, bukan hostname Vercel.
+- Jika sumber Cosmic membatasi penyematan iframe, gunakan tombol **Buka reader asli** untuk membuka chapter langsung pada tab baru.
 - Route yang butuh data akan dirender on-demand (`ƒ`), jadi `next build`
   tidak pernah memanggil jaringan.
 - Resolusi domain_results disimpan per instance. Cache 30 menit, jadi instance

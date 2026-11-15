@@ -23,6 +23,8 @@ export interface Chapter {
 
 export interface ChapterDetail {
   images: string[]
+  pageCount?: number
+  readerUrl?: string
   prev?: string
   next?: string
   chapters?: Chapter[]

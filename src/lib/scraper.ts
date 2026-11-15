@@ -66,8 +66,12 @@ interface ApiChapterPage {
     chapters?: string[] | null;
     otherChapters?: ApiChapter[] | null;
     slugManga?: string | null;
+    pageCount?: number | null;
+    redirect_link?: string | null;
   } | null;
 }
+
+
 
 interface ListResult {
   items: Komik[];
@@ -366,14 +370,29 @@ export async function getChapterImages(
       ),
     );
     const data = res?.data;
-    if (!data) return null;
+    if (!data || data.redirect_link) return null;
 
+    const chapters = toChapters(data.otherChapters);
+    const index = chapters.findIndex((chapter) => chapter.slug === chapterSlug);
+    const pageCount = Number(data.pageCount ?? 0);
+
+    // Cosmic membatasi Turnstile ke hostname reader resminya. Muat reader asli
+    // pada origin tersebut agar verifikasi dan gambar berjalan pada domain yang
+    // diizinkan pemilik site key, bukan pada hostname deployment Vercel.
+    if (Number.isInteger(pageCount) && pageCount > 0) {
+      return {
+        images: [],
+        pageCount,
+        readerUrl: `https://04.cosmicscans.to/chapter/${encodeURIComponent(chapterSlug)}`,
+        next: index > 0 ? chapters[index - 1].slug : "",
+        prev: index >= 0 ? (chapters[index + 1]?.slug ?? "") : "",
+        chapters,
+      };
+    }
+
+    // Payload lama yang mengirim URL/HTML gambar langsung tetap didukung.
     const images = extractImages(data.chapters);
     if (images.length === 0) return null;
-
-    // otherChapters diurutkan terbaru -> terlama.
-    const chapters = toChapters(data.otherChapters);
-    const index = chapters.findIndex((c) => c.slug === chapterSlug);
 
     return {
       images,
@@ -385,7 +404,6 @@ export async function getChapterImages(
     return null;
   }
 }
-
 async function searchApi(apiBase: string, term: string): Promise<ApiList | null> {
   try {
     return await getJson<ApiList>(
