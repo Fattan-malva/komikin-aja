@@ -28,6 +28,7 @@ function makeImageUrl(
   const [signKeyHex, maskKeyHex] = axisKeys;
   const signKey = decodeHex(signKeyHex);
   const maskKey = decodeHex(maskKeyHex);
+  if (maskKey.length === 0) throw new Error("Empty image mask key");
   const payload = Buffer.from(
     `${chapterSlug}:${pageIndex}:${Date.now()}`,
     "utf8",
@@ -61,7 +62,7 @@ export async function POST(
         "Content-Type": "application/json",
         "Accept": "application/json",
         "Origin": process.env.DOMAIN_KOMIK ?? source.entry,
-        "Referer": `${(process.env.DOMAIN_KOMIK ?? source.entry).replace(/\\/$/, "")}/`,
+        "Referer": `${(process.env.DOMAIN_KOMIK ?? source.entry).replace(/\/$/, "")}/`,
       },
       body: JSON.stringify({
         turnstile_token: turnstileToken,
