@@ -1,4 +1,5 @@
-import { getJson, isTransientError, mapWithConcurrency } from "./http";
+import { getJson, getText, isTransientError, mapWithConcurrency } from "./http";
+import { load as loadHtml } from "cheerio";
 import { invalidatePrimarySource, resolvePrimarySource } from "./resolve";
 import { computeRelevance, formatDate, sanitizeHtml, slugify } from "./utils";
 import type {
@@ -376,26 +377,41 @@ export async function getChapterImages(
     const index = chapters.findIndex((chapter) => chapter.slug === chapterSlug);
     const pageCount = Number(data.pageCount ?? 0);
 
-    // Cosmic membatasi Turnstile ke hostname reader resminya. Muat reader asli
-    // pada origin tersebut agar verifikasi dan gambar berjalan pada domain yang
-    // diizinkan pemilik site key, bukan pada hostname deployment Vercel.
+    // Ikuti alur reader CosmicScansID: request halaman chapter lalu parse
+    // elemen gambar di #readerarea (bukan iframe dan bukan API pageCount saja).
+    let images: string[] = [];
     if (Number.isInteger(pageCount) && pageCount > 0) {
-      return {
-        images: [],
-        pageCount,
-        readerUrl: `https://04.cosmicscans.to/chapter/${encodeURIComponent(chapterSlug)}`,
-        next: index > 0 ? chapters[index - 1].slug : "",
-        prev: index >= 0 ? (chapters[index + 1]?.slug ?? "") : "",
-        chapters,
-      };
+      const chapterUrl = `https://lc1.cosmicscans.to/chapter/${encodeURIComponent(chapterSlug)}`;
+      const { body, finalUrl } = await getText(chapterUrl, 25_000);
+      const $ = loadHtml(body);
+      const readerImages = $("#readerarea img:not(noscript img):not([alt=''])").toArray();
+
+      images = readerImages
+        .map((element) => {
+          const image = $(element);
+          const value =
+            image.attr("data-lazy-src") ||
+            image.attr("data-src") ||
+            image.attr("data-cfsrc") ||
+            image.attr("src") ||
+            "";
+          if (!value || value.startsWith("data:")) return "";
+          try {
+            return new URL(value, finalUrl).toString();
+          } catch {
+            return "";
+          }
+        })
+        .filter((url): url is string => Boolean(url));
     }
 
-    // Payload lama yang mengirim URL/HTML gambar langsung tetap didukung.
-    const images = extractImages(data.chapters);
+    // Kompatibilitas dengan payload API lama yang sudah berisi URL gambar.
+    if (images.length === 0) images = extractImages(data.chapters);
     if (images.length === 0) return null;
 
     return {
       images,
+      pageCount: pageCount > 0 ? pageCount : images.length,
       next: index > 0 ? chapters[index - 1].slug : "",
       prev: index >= 0 ? (chapters[index + 1]?.slug ?? "") : "",
       chapters,
