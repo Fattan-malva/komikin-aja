@@ -332,7 +332,22 @@ function extractImages(chunks?: string[] | null): string[] {
   if (!Array.isArray(chunks)) return [];
   const images: string[] = [];
   for (const chunk of chunks) {
-    const src = /<img[^>]+src=['"]([^'"]+)['"]/i.exec(chunk ?? "")?.[1];
+    const value = (chunk ?? "").trim();
+    if (!value) continue;
+
+    // API sumber utama mengirim URL gambar mentah, bukan potongan HTML.
+    if (/^(?:https?:)?\/\//i.test(value) || value.startsWith("/")) {
+      images.push(value);
+      continue;
+    }
+
+    // Sebagian chapter (mis. hasil impor lama) masih berupa tag <img>.
+    const tag = /<img\b[^>]*>/i.exec(value)?.[0];
+    if (!tag) continue;
+    const src =
+      /\b(?:data-src|data-lazy-src)=['"]([^'"]+)['"]/i.exec(tag)?.[1] ??
+      /\bsrc=['"]([^'"]+)['"]/i.exec(tag)?.[1] ??
+      /\bsrcset=['"]([^'"]+)['"]/i.exec(tag)?.[1]?.trim().split(/\s+/)[0];
     if (src) images.push(src);
   }
   return images;
