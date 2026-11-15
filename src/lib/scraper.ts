@@ -387,6 +387,7 @@ export async function getChapterImages(
         getJson<ApiImageConfig>(`${apiBase}/v1/manga/img/config`),
       );
       turnstileSiteKey = config?.data?.turnstileSiteKey ?? "";
+      if (!turnstileSiteKey) return null;
     }
 
     // otherChapters diurutkan terbaru -> terlama.
