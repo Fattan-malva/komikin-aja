@@ -56,13 +56,14 @@ export async function POST(
     }
 
     const source = await resolvePrimarySource();
+    const siteOrigin = new URL(process.env.DOMAIN_KOMIK ?? source.entry).origin;
     const response = await fetch(`${source.apiBase}/v1/manga/img/session`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
         "Accept": "application/json",
-        "Origin": process.env.DOMAIN_KOMIK ?? source.entry,
-        "Referer": `${(process.env.DOMAIN_KOMIK ?? source.entry).replace(/\/$/, "")}/`,
+        "Origin": siteOrigin,
+        "Referer": `${siteOrigin}/`,
       },
       body: JSON.stringify({
         turnstile_token: turnstileToken,
