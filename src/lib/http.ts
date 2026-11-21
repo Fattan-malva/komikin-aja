@@ -43,6 +43,20 @@ export async function getJson<T>(url: string, timeout = 20_000): Promise<T> {
   return res.data;
 }
 
+export async function postJson<T>(
+  url: string,
+  body: unknown,
+  headers: Record<string, string> = {},
+  timeout = 20_000,
+): Promise<T> {
+  const res = await client.post<T>(url, body, {
+    timeout,
+    responseType: "json",
+    headers: { "Content-Type": "application/json", ...headers },
+  });
+  return res.data;
+}
+
 export interface ProbeResponse {
   status: number;
   body: string;

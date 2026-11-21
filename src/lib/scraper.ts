@@ -1,5 +1,4 @@
-import { getJson, getText, isTransientError, mapWithConcurrency } from "./http";
-import { load as loadHtml } from "cheerio";
+import { getJson, postJson, isTransientError, mapWithConcurrency } from "./http";
 import { invalidatePrimarySource, resolvePrimarySource } from "./resolve";
 import { computeRelevance, formatDate, sanitizeHtml, slugify } from "./utils";
 import type {
@@ -69,6 +68,14 @@ interface ApiChapterPage {
     slugManga?: string | null;
     pageCount?: number | null;
     redirect_link?: string | null;
+  } | null;
+}
+
+interface ApiImageSession {
+  success?: boolean;
+  data?: {
+    sessionId?: string;
+    axisKeys?: string[];
   } | null;
 }
 
@@ -342,7 +349,8 @@ function extractImages(chunks?: string[] | null): string[] {
 
     // API sumber utama mengirim URL gambar mentah, bukan potongan HTML.
     if (/^(?:https?:)?\/\//i.test(value) || value.startsWith("/")) {
-      images.push(value);
+      // `trap/*` adalah gambar jebakan, bukan halaman chapter.
+      if (!value.includes("/v1/manga/img/trap/")) images.push(value);
       continue;
     }
 
@@ -358,6 +366,82 @@ function extractImages(chunks?: string[] | null): string[] {
   return images;
 }
 
+/* ------------------------------------------------------------------ *
+ * Penandatanganan URL gambar Cosmic
+ * ------------------------------------------------------------------ */
+
+// Server hanya menolak timestamp lampau, bukan masa depan; offset 1 hari
+// mencegah URL kedaluwarsa (30 detik) sebelum gambar selesai dimuat.
+const IMAGE_URL_TIME_OFFSET = 24 * 60 * 60 * 1000;
+
+function hexBytes(hex: string): Uint8Array<ArrayBuffer> {
+  if (!/^(?:[0-9a-f]{2})+$/i.test(hex)) throw new Error("Kunci sesi gambar tidak valid");
+  const out = new Uint8Array(hex.length / 2);
+  for (let i = 0; i < out.length; i++) out[i] = Number.parseInt(hex.slice(i * 2, i * 2 + 2), 16);
+  return out;
+}
+
+function xorBytes(value: Uint8Array, key: Uint8Array): Uint8Array<ArrayBuffer> {
+  if (key.length === 0) throw new Error("Kunci masker gambar kosong");
+  const out = new Uint8Array(value.length);
+  for (let i = 0; i < value.length; i++) out[i] = value[i] ^ key[i % key.length];
+  return out;
+}
+
+function base64Url(bytes: Uint8Array): string {
+  let binary = "";
+  for (const byte of bytes) binary += String.fromCharCode(byte);
+  return btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+}
+
+/**
+ * Reader Cosmic menyembunyikan URL gambar di canvas dan memberi URL `trap/*`
+ * yang bukan gambar chapter. URL aslinya ditandatangani client dengan kunci
+ * sesi; kita lakukan hal yang sama di server supaya next/image & proxy app
+ * tetap menerima URL gambar biasa.
+ */
+async function signedChapterImages(
+  apiBase: string,
+  origin: string,
+  chapterSlug: string,
+  pageCount: number,
+): Promise<string[]> {
+  // Konfigurasi sumber saat ini mematikan Turnstile; token "dev-bypass" adalah
+  // nilai yang dipakai reader resminya pada kondisi tersebut.
+  const session = await postJson<ApiImageSession>(
+    `${apiBase}/v1/manga/img/session`,
+    { turnstile_token: "dev-bypass", chapter_slug: chapterSlug },
+    { Origin: origin, Referer: `${origin}/` },
+  );
+  const { sessionId, axisKeys } = session?.data ?? {};
+  if (!sessionId || !axisKeys || axisKeys.length < 2) {
+    throw new Error("Respons sesi gambar Cosmic tidak valid");
+  }
+
+  const signKey = hexBytes(axisKeys[0]);
+  const maskKey = hexBytes(axisKeys[1]);
+  const signer = await crypto.subtle.importKey(
+    "raw",
+    signKey,
+    { name: "HMAC", hash: "SHA-256" },
+    false,
+    ["sign"],
+  );
+
+  return Promise.all(
+    Array.from({ length: pageCount }, async (_, pageIndex) => {
+      const message = xorBytes(
+        new TextEncoder().encode(
+          `${chapterSlug}:${pageIndex}:${Date.now() + IMAGE_URL_TIME_OFFSET}`,
+        ),
+        maskKey,
+      );
+      const signature = new Uint8Array(await crypto.subtle.sign("HMAC", signer, message));
+      return `${apiBase}/v1/manga/img/r/${sessionId}.${base64Url(signature)}.${base64Url(message)}`;
+    }),
+  );
+}
+
 export async function getChapterImages(
   _slug: string,
   chapterSlug: string,
@@ -365,44 +449,28 @@ export async function getChapterImages(
   if (!chapterSlug) return null;
 
   try {
-    const res = await cosmic((apiBase) =>
-      getJson<ApiChapterPage>(
-        `${apiBase}/v1/manga/readingPage/${encodeURIComponent(chapterSlug)}`,
-      ),
-    );
-    const data = res?.data;
+    const { data, apiBase, origin } = await cosmic(async (apiBase) => ({
+      data: (
+        await getJson<ApiChapterPage>(
+          `${apiBase}/v1/manga/readingPage/${encodeURIComponent(chapterSlug)}`,
+        )
+      )?.data,
+      apiBase,
+      origin: (await resolvePrimarySource()).origin,
+    }));
     if (!data || data.redirect_link) return null;
 
     const chapters = toChapters(data.otherChapters);
     const index = chapters.findIndex((chapter) => chapter.slug === chapterSlug);
     const pageCount = Number(data.pageCount ?? 0);
 
-    // Ikuti alur reader CosmicScansID: request halaman chapter lalu parse
-    // elemen gambar di #readerarea (bukan iframe dan bukan API pageCount saja).
     let images: string[] = [];
     if (Number.isInteger(pageCount) && pageCount > 0) {
-      const chapterUrl = `https://lc1.cosmicscans.to/chapter/${encodeURIComponent(chapterSlug)}`;
-      const { body, finalUrl } = await getText(chapterUrl, 25_000);
-      const $ = loadHtml(body);
-      const readerImages = $("#readerarea img:not(noscript img):not([alt=''])").toArray();
-
-      images = readerImages
-        .map((element) => {
-          const image = $(element);
-          const value =
-            image.attr("data-lazy-src") ||
-            image.attr("data-src") ||
-            image.attr("data-cfsrc") ||
-            image.attr("src") ||
-            "";
-          if (!value || value.startsWith("data:")) return "";
-          try {
-            return new URL(value, finalUrl).toString();
-          } catch {
-            return "";
-          }
-        })
-        .filter((url): url is string => Boolean(url));
+      try {
+        images = await signedChapterImages(apiBase, origin, chapterSlug, pageCount);
+      } catch (error) {
+        console.warn("[cosmic-images] gagal membuat URL bertanda tangan:", error);
+      }
     }
 
     // Kompatibilitas dengan payload API lama yang sudah berisi URL gambar.
