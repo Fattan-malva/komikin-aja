@@ -1,10 +1,14 @@
 import { connection } from 'next/server'
+import { cookies } from 'next/headers'
 import { getGenreList } from '@/src/lib/scraper'
+import { getGenreListH } from '@/src/lib/scrapper-h'
+import { MODE_COOKIE, isHMode } from '@/src/lib/mode'
 import GenreBadge from '@/src/components/GenreBadge'
 
 export default async function GenresPage() {
   await connection()
-  const genres = await getGenreList()
+  const hMode = isHMode((await cookies()).get(MODE_COOKIE)?.value)
+  const genres = hMode ? await getGenreListH() : await getGenreList()
 
   return (
     <div>

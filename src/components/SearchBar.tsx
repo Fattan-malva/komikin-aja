@@ -2,6 +2,7 @@
 
 import { useRouter } from 'next/navigation'
 import { useState, FormEvent } from 'react'
+import { MODE_COOKIE } from '@/src/lib/mode'
 
 interface SearchBarProps {
   onSearch?: () => void
@@ -14,10 +15,22 @@ export default function SearchBar({ onSearch, initialQuery = '' }: SearchBarProp
 
   function handleSubmit(e: FormEvent) {
     e.preventDefault()
-    if (query.trim()) {
-      router.push(`/search?q=${encodeURIComponent(query.trim())}`)
+    const term = query.trim()
+    if (!term) return
+
+    const mode = term.toLowerCase()
+    if (mode === 'h-mode' || mode === 'k-mode') {
+      const value = mode === 'h-mode' ? 'h' : 'k'
+      document.cookie = `${MODE_COOKIE}=${value}; path=/; max-age=31536000; samesite=lax`
+      setQuery('')
+      router.replace('/')
+      router.refresh()
       onSearch?.()
+      return
     }
+
+    router.push(`/search?q=${encodeURIComponent(term)}`)
+    onSearch?.()
   }
 
   return (

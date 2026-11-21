@@ -2,7 +2,7 @@ import * as cheerio from "cheerio";
 import { getText, isTransientError } from "./http";
 import { invalidateSecondarySource, resolveSecondarySource } from "./resolve";
 import { extractSlug, sanitizeHtml, slugify } from "./utils";
-import type { Chapter, ChapterDetail, Komik, KomikListResponse } from "@/src/types";
+import type { Chapter, ChapterDetail, Genre, Komik, KomikListResponse } from "@/src/types";
 
 /**
  * Sumber kedua (DOMAIN_KOMIK_H) adalah situs WordPress bertema "mangareader".
@@ -228,6 +228,29 @@ function parseReaderPayload(raw: string): Record<string, unknown> {
 /* ------------------------------------------------------------------ *
  * API publik
  * ------------------------------------------------------------------ */
+
+export async function getHomeH(page: number = 1): Promise<KomikListResponse> {
+  const path = page > 1 ? `/komik/page/${page}/?order=update` : `/komik/?order=update`;
+  const html = await hFetch(path);
+  return {
+    komik: parseBsxList(html),
+    currentPage: page,
+    totalPages: countPages(html, page),
+  };
+}
+
+export async function getGenreListH(): Promise<Genre[]> {
+  const $ = cheerio.load(await hFetch("/"));
+  const seen = new Map<string, Genre>();
+  $('a[href*="/genres/"]').each((_, el) => {
+    const href = ($(el).attr("href") ?? "").split("?")[0];
+    const raw = href.replace(/\/+$/, "").split("/").pop() ?? "";
+    const slug = slugify(decodeURIComponent(raw));
+    const name = $(el).text().trim();
+    if (slug && name && !seen.has(slug)) seen.set(slug, { name: titleCase(name), slug });
+  });
+  return [...seen.values()].sort((a, b) => a.name.localeCompare(b.name, "id"));
+}
 
 export async function searchKomikH(
   query: string,

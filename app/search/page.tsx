@@ -1,7 +1,9 @@
 import { connection } from 'next/server'
+import { cookies } from 'next/headers'
 import { searchKomik } from '@/src/lib/scraper'
 import { searchKomikH } from '@/src/lib/scrapper-h'
 import { computeRelevance } from '@/src/lib/utils'
+import { MODE_COOKIE, isHMode } from '@/src/lib/mode'
 import KomikGrid from '@/src/components/KomikGrid'
 import SearchBar from '@/src/components/SearchBar'
 import SearchFilters from '@/src/components/SearchFilters'
@@ -17,6 +19,7 @@ export default async function SearchPage({ searchParams }: Props) {
   const sp = await searchParams
   const query = sp.q || ''
   const page = Number(sp.page) || 1
+  const hMode = isHMode((await cookies()).get(MODE_COOKIE)?.value)
 
   const filters: SearchFiltersType = {}
   for (const key of ['genre', 'type', 'status', 'author', 'artist', 'exclude', 'project', 'order', 'orderby'] as const) {
@@ -28,47 +31,44 @@ export default async function SearchPage({ searchParams }: Props) {
   let totalPages = 1
 
   if (query) {
-    const isHOnly = query.startsWith('h-')
-    const searchQuery = isHOnly ? query.slice(2) : query
+    if (hMode) {
+      // Mode H: jangan pernah ikutkan hasil dari sumber komik biasa.
+      const res = await searchKomikH(query, page)
+      results = res.komik
+      if (res.totalPages) totalPages = res.totalPages
+    } else {
+      const [regular, h] = await Promise.allSettled([
+        searchKomik(query, page, filters),
+        searchKomikH(query, page),
+      ])
 
-    const [regular, h] = await Promise.allSettled([
-      searchKomik(searchQuery, page, isHOnly ? undefined : filters),
-      searchKomikH(searchQuery, page),
-    ])
+      if (regular.status === 'fulfilled') {
+        results = regular.value.komik
+        if (regular.value.totalPages) totalPages = regular.value.totalPages
+      }
 
-    if (!isHOnly && regular.status === 'fulfilled') {
-      results = regular.value.komik
-      if (regular.value.totalPages) totalPages = regular.value.totalPages
-    }
+      if (results.length === 0 && h.status === 'fulfilled') {
+        results = h.value.komik
+      }
 
-    if (isHOnly && h.status === 'fulfilled') {
-      results = h.value.komik
-    }
-
-    // If regular search is empty but H has results, show H results
-    if (!isHOnly && results.length === 0 && h.status === 'fulfilled') {
-      results = h.value.komik
-    }
-
-    // More Like: from the opposite source, deduplicated
-    const resultSlugs = new Set(results.map(k => k.slug))
-    const moreSource = isHOnly ? regular : h
-
-    if (moreSource.status === 'fulfilled' && moreSource.value.komik.length > 0) {
-      for (const k of moreSource.value.komik) {
-        if (!resultSlugs.has(k.slug)) {
-          moreLike.push(k)
-          resultSlugs.add(k.slug)
+      // More Like: dari sumber H, deduplikasi terhadap hasil utama.
+      const resultSlugs = new Set(results.map(k => k.slug))
+      if (h.status === 'fulfilled') {
+        for (const k of h.value.komik) {
+          if (!resultSlugs.has(k.slug)) {
+            moreLike.push(k)
+            resultSlugs.add(k.slug)
+          }
         }
       }
-    }
 
-    moreLike.sort((a, b) => {
-      const relA = computeRelevance(a.title, searchQuery)
-      const relB = computeRelevance(b.title, searchQuery)
-      if (relA !== relB) return relB - relA
-      return parseFloat(b.rating || '0') - parseFloat(a.rating || '0')
-    })
+      moreLike.sort((a, b) => {
+        const relA = computeRelevance(a.title, query)
+        const relB = computeRelevance(b.title, query)
+        if (relA !== relB) return relB - relA
+        return parseFloat(b.rating || '0') - parseFloat(a.rating || '0')
+      })
+    }
   }
 
   const showResults = results.length > 0
@@ -79,7 +79,7 @@ export default async function SearchPage({ searchParams }: Props) {
       <div className="max-w-md mx-auto">
         <SearchBar initialQuery={query} />
       </div>
-      <SearchFilters filters={filters} query={query} />
+      {!hMode && <SearchFilters filters={filters} query={query} />}
       {query && showResults && (
         <section>
           <div className="flex items-center justify-between mb-4">

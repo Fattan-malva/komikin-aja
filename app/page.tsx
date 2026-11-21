@@ -1,6 +1,10 @@
 import { Suspense } from 'react'
 import { connection } from 'next/server'
+import { cookies } from 'next/headers'
 import { getHome, getDetail, getPopular, getManhwa, getManga, getManhua } from '@/src/lib/scraper'
+import { getHomeH, getDetailH } from '@/src/lib/scrapper-h'
+import { stripHPrefix } from '@/src/lib/utils'
+import { MODE_COOKIE, isHMode } from '@/src/lib/mode'
 import BannerCarousel from '@/src/components/BannerCarousel'
 import PopularScroll from '@/src/components/PopularScroll'
 import LatestUpdates from '@/src/components/LatestUpdates'
@@ -27,11 +31,15 @@ async function safe<T>(fn: () => Promise<T>, fallback: T): Promise<T> {
 
 const EMPTY: { komik: [] } = { komik: [] }
 
-async function BannerSection() {
-  const homeData = await safe(() => getHome(1), EMPTY)
+async function BannerSection({ hMode }: { hMode: boolean }) {
+  const homeData = await safe(() => (hMode ? getHomeH(1) : getHome(1)), EMPTY)
   const bannerManga = homeData.komik.slice(0, 5)
   const results = await Promise.allSettled(
-    bannerManga.map(m => getDetail(m.slug)),
+    bannerManga.map(m =>
+      hMode
+        ? getDetailH(stripHPrefix(m.slug)).then(detail => detail && { ...detail, slug: m.slug })
+        : getDetail(m.slug),
+    ),
   )
   const bannerData = bannerManga.map((m, i) => {
     if (results[i].status === 'fulfilled' && results[i].value) {
@@ -83,10 +91,10 @@ async function ManhuaSection() {
   return <TypeScroll items={data.komik} title="Manhua" />
 }
 
-async function LatestSection({ searchParams }: Props) {
+async function LatestSection({ searchParams, hMode }: Props & { hMode: boolean }) {
   const { page } = await searchParams
   const currentPage = Number(page) || 1
-  const data = await safe(() => getHome(currentPage), EMPTY)
+  const data = await safe(() => (hMode ? getHomeH(currentPage) : getHome(currentPage)), EMPTY)
   return (
     <>
       <LatestUpdates items={data.komik} />
@@ -99,30 +107,36 @@ async function LatestSection({ searchParams }: Props) {
 
 export default async function Home({ searchParams }: Props) {
   await connection()
+  const hMode = isHMode((await cookies()).get(MODE_COOKIE)?.value)
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
       <Suspense fallback={<BannerFallback />}>
-        <BannerSection />
+        <BannerSection hMode={hMode} />
       </Suspense>
 
-      <Suspense fallback={<ScrollFallback />}>
-        <PopularSection />
-      </Suspense>
+      {/* Sumber H tidak menyediakan endpoint popular/per-tipe yang setara. */}
+      {!hMode && (
+        <>
+          <Suspense fallback={<ScrollFallback />}>
+            <PopularSection />
+          </Suspense>
 
-      <Suspense fallback={<ScrollFallback />}>
-        <ManhwaSection />
-      </Suspense>
+          <Suspense fallback={<ScrollFallback />}>
+            <ManhwaSection />
+          </Suspense>
 
-      <Suspense fallback={<ScrollFallback />}>
-        <MangaSection />
-      </Suspense>
+          <Suspense fallback={<ScrollFallback />}>
+            <MangaSection />
+          </Suspense>
 
-      <Suspense fallback={<ScrollFallback />}>
-        <ManhuaSection />
-      </Suspense>
+          <Suspense fallback={<ScrollFallback />}>
+            <ManhuaSection />
+          </Suspense>
+        </>
+      )}
 
       <Suspense fallback={<SkeletonGrid />}>
-        <LatestSection searchParams={searchParams} />
+        <LatestSection searchParams={searchParams} hMode={hMode} />
       </Suspense>
     </div>
   )
