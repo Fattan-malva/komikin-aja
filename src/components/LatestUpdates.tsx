@@ -49,7 +49,7 @@ export default function LatestUpdates({ items }: Props) {
               <TypeBadge type={k.type} />
             </div>
             <div className="flex-1 min-w-0">
-              <h3 className="text-sm font-semibold text-gray-100 line-clamp-1 group-hover:text-[#a855f7] transition-colors">
+              <h3 className="text-sm font-semibold text-gray-100 line-clamp-1 group-hover:text-[#22c55e] transition-colors">
                 {k.title}
               </h3>
               <div className="flex items-center gap-2 mt-1">

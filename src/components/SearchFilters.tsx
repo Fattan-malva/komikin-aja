@@ -165,7 +165,7 @@ export default function SearchFilters({ filters, query }: Props) {
           <div className="flex gap-2">
             <button
               type="submit"
-              className="px-4 py-1.5 text-sm font-medium bg-[#a855f7] text-white rounded hover:bg-[#9333ea] transition-colors"
+              className="px-4 py-1.5 text-sm font-medium bg-[#22c55e] text-white rounded hover:bg-[#16a34a] transition-colors"
             >
               Apply Filters
             </button>

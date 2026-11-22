@@ -30,7 +30,7 @@ export default function GlobalError({ error, reset }: { error: Error & { digest?
       <div className="flex flex-wrap items-center justify-center gap-3">
         <button
           onClick={reset}
-          className="px-6 py-2.5 bg-[#a855f7] text-white rounded-lg hover:bg-[#9333ea] transition-colors"
+          className="px-6 py-2.5 bg-[#22c55e] text-white rounded-lg hover:bg-[#16a34a] transition-colors"
         >
           Coba lagi
         </button>

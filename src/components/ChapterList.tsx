@@ -69,16 +69,16 @@ export default function ChapterList({ slug, chapters: initialChapters }: Props) 
             href={`/baca/${slug}/${ch.slug}`}
             onClick={() => handleChapterClick(ch.slug)}
             className={`flex items-center justify-between px-4 py-3 rounded-lg transition-all duration-200 ${isRead
-                ? 'bg-purple-600/20 border border-purple-500/30'
+                ? 'bg-emerald-600/20 border border-emerald-500/30'
                 : 'bg-white/5 hover:bg-white/10 border border-transparent hover:border-white/10 text-gray-300 group'
               }`}
           >
             <div className="flex items-center gap-2 min-w-0">
               {isRead && (
-                <div className="w-2 h-2 rounded-full bg-purple-400 flex-shrink-0 animate-pulse"></div>
+                <div className="w-2 h-2 rounded-full bg-emerald-400 flex-shrink-0 animate-pulse"></div>
               )}
               <span className={`text-sm ${isRead
-                  ? 'text-purple-300 font-medium'
+                  ? 'text-emerald-300 font-medium'
                   : 'text-gray-300 group-hover:text-white'
                 }`}>
                 {ch.title ?? ''}
@@ -86,7 +86,7 @@ export default function ChapterList({ slug, chapters: initialChapters }: Props) 
             </div>
             {ch.date && (
               <span className={`text-xs flex-shrink-0 ${isRead
-                  ? 'text-purple-300/80'
+                  ? 'text-emerald-300/80'
                   : 'text-gray-400 group-hover:text-gray-300'
                 }`}>
                 {ch.date}

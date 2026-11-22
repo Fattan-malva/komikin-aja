@@ -38,7 +38,7 @@ export default function KomikCard({ komik }: Props) {
           <TypeBadge type={komik.type} />
           <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
         </div>
-        <h3 className="text-sm font-semibold text-gray-100 line-clamp-2 leading-tight group-hover:text-[#a855f7] transition-colors">
+        <h3 className="text-sm font-semibold text-gray-100 line-clamp-2 leading-tight group-hover:text-[#22c55e] transition-colors">
           {komik.title}
         </h3>
       </Link>

@@ -100,7 +100,7 @@ export default function Reader({ slug, chapterId, data }: Props) {
                 href={data.readerUrl}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="rounded-lg bg-purple-600 px-3 py-2 text-xs font-semibold text-white transition-colors hover:bg-purple-500"
+                className="rounded-lg bg-emerald-600 px-3 py-2 text-xs font-semibold text-white transition-colors hover:bg-emerald-500"
               >
                 Buka reader asli
               </a>
@@ -136,7 +136,7 @@ export default function Reader({ slug, chapterId, data }: Props) {
       {/* Floating Nav Panel */}
       <div className="fixed bottom-6 right-6 z-50">
         <div
-          className={`absolute bottom-[72px] right-0 bg-[#1a1a2e]/95 backdrop-blur-md border border-white/10 rounded-2xl shadow-xl shadow-black/40 overflow-hidden transition-all duration-300 ease-out origin-bottom-right ${
+          className={`absolute bottom-[72px] right-0 bg-[#111111]/95 backdrop-blur-md border border-white/10 rounded-2xl shadow-xl shadow-black/40 overflow-hidden transition-all duration-300 ease-out origin-bottom-right ${
             navOpen
               ? "opacity-100 scale-100 translate-y-0"
               : "opacity-0 scale-95 translate-y-4 pointer-events-none"
@@ -159,7 +159,7 @@ export default function Reader({ slug, chapterId, data }: Props) {
                   <button
                     onClick={() => setAutoScrollEnabled(!autoScrollEnabled)}
                     className={`relative inline-flex h-5 w-10 items-center rounded-full transition-colors duration-200 focus:outline-none ${
-                      autoScrollEnabled ? "bg-purple-600" : "bg-gray-600"
+                      autoScrollEnabled ? "bg-emerald-600" : "bg-gray-600"
                     }`}
                   >
                     <span
@@ -182,7 +182,7 @@ export default function Reader({ slug, chapterId, data }: Props) {
                         onClick={() => setAutoScrollSpeed(speed.value)}
                         className={`flex-1 py-1 text-[10px] rounded-md transition-all duration-200 ${
                           autoScrollSpeed === speed.value
-                            ? "bg-purple-500 text-white shadow-sm"
+                            ? "bg-emerald-500 text-white shadow-sm"
                             : "bg-white/5 text-gray-400 hover:bg-white/10"
                         }`}
                       >
@@ -287,7 +287,7 @@ export default function Reader({ slug, chapterId, data }: Props) {
                   setNavOpen(false);
                   setModalOpen(true);
                 }}
-                className="flex items-center gap-3 w-full px-3 py-2.5 rounded-xl bg-[#a855f7]/15 hover:bg-[#a855f7]/25 transition-colors text-[#c084fc] cursor-pointer"
+                className="flex items-center gap-3 w-full px-3 py-2.5 rounded-xl bg-[#22c55e]/15 hover:bg-[#22c55e]/25 transition-colors text-[#86efac] cursor-pointer"
               >
                 <svg
                   className="w-4 h-4 shrink-0"
@@ -332,7 +332,7 @@ export default function Reader({ slug, chapterId, data }: Props) {
         {/* FAB Button */}
         <button
           onClick={() => setNavOpen(!navOpen)}
-          className={`relative z-10 w-14 h-14 rounded-full bg-[#a855f7] hover:bg-[#9333ea] text-white shadow-lg shadow-purple-500/30 flex items-center justify-center transition-all duration-200 hover:scale-110 cursor-pointer ${
+          className={`relative z-10 w-14 h-14 rounded-full bg-[#22c55e] hover:bg-[#16a34a] text-white shadow-lg shadow-emerald-500/30 flex items-center justify-center transition-all duration-200 hover:scale-110 cursor-pointer ${
             navOpen ? "rotate-45" : "rotate-0"
           }`}
           aria-label="Navigation"
@@ -375,7 +375,7 @@ export default function Reader({ slug, chapterId, data }: Props) {
             onClick={() => setModalOpen(false)}
           />
 
-          <div className="relative w-full max-w-md bg-[#1a1a2e] border border-white/10 rounded-2xl shadow-2xl shadow-black/50 transform transition-all duration-300 animate-[modalIn_0.3s_ease-out]">
+          <div className="relative w-full max-w-md bg-[#111111] border border-white/10 rounded-2xl shadow-2xl shadow-black/50 transform transition-all duration-300 animate-[modalIn_0.3s_ease-out]">
             <div className="flex items-center justify-between px-5 py-4 border-b border-white/10">
               <h3 className="text-white font-semibold text-base">
                 Daftar Chapter
@@ -415,23 +415,23 @@ export default function Reader({ slug, chapterId, data }: Props) {
                       }}
                       className={`flex items-center justify-between px-4 py-3 rounded-xl transition-all duration-200 mb-1 ${
                         isRead
-                          ? "bg-purple-600/20 border border-purple-500/30"
+                          ? "bg-emerald-600/20 border border-emerald-500/30"
                           : "bg-white/5 hover:bg-white/10 border border-transparent hover:border-white/10"
                       }`}
                     >
                       <div className="flex items-center gap-2 min-w-0">
                         {isRead && (
-                          <div className="w-2 h-2 rounded-full bg-purple-400 flex-shrink-0 animate-pulse" />
+                          <div className="w-2 h-2 rounded-full bg-emerald-400 flex-shrink-0 animate-pulse" />
                         )}
                         <span
-                          className={`text-sm ${isRead ? "text-purple-300 font-medium" : "text-gray-300 group-hover:text-white"}`}
+                          className={`text-sm ${isRead ? "text-emerald-300 font-medium" : "text-gray-300 group-hover:text-white"}`}
                         >
                           {ch.title ? `${ch.title}` : `Chapter ${ch.number}`}
                         </span>
                       </div>
                       {ch.date && (
                         <span
-                          className={`text-xs flex-shrink-0 ${isRead ? "text-purple-300/80" : "text-gray-400"}`}
+                          className={`text-xs flex-shrink-0 ${isRead ? "text-emerald-300/80" : "text-gray-400"}`}
                         >
                           {ch.date}
                         </span>
@@ -449,7 +449,7 @@ export default function Reader({ slug, chapterId, data }: Props) {
             <div className="px-5 py-3 border-t border-white/10 text-center">
               <Link
                 href={`/komik/${slug}`}
-                className="text-xs text-[#a855f7] hover:underline"
+                className="text-xs text-[#22c55e] hover:underline"
               >
                 Kembali ke Detail Komik
               </Link>

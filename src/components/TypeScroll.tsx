@@ -81,7 +81,7 @@ export default function TypeScroll({ items, title, icon }: Props) {
                             )}
                         </div>
 
-                        <h3 className="text-sm font-semibold text-gray-100 line-clamp-2 leading-tight group-hover:text-[#a855f7] transition-colors">
+                        <h3 className="text-sm font-semibold text-gray-100 line-clamp-2 leading-tight group-hover:text-[#22c55e] transition-colors">
                             {k.title}
                         </h3>
                     </Link>

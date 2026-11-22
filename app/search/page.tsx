@@ -87,7 +87,7 @@ export default async function SearchPage({ searchParams }: Props) {
         <section>
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-lg font-bold text-white">
-              Results for <span className="text-[#a855f7]">{query}</span>
+              Results for <span className="text-[#22c55e]">{query}</span>
             </h2>
             <span className="text-sm text-gray-400">{results.length} found</span>
           </div>

@@ -3,10 +3,10 @@ import { NextRequest } from 'next/server'
 const IMAGE_TYPES = ['image/', 'application/octet-stream']
 
 const PLACEHOLDER_SVG = `<svg xmlns="http://www.w3.org/2000/svg" width="800" height="600" viewBox="0 0 800 600">
-  <rect width="800" height="600" fill="#1a1a2e"/>
-  <rect x="300" y="200" width="200" height="200" rx="100" fill="#2d2d4e"/>
-  <circle cx="400" cy="280" r="12" fill="#a855f7" opacity="0.5"/>
-  <path d="M370 320 Q400 290 430 320" stroke="#a855f7" stroke-width="3" fill="none" stroke-linecap="round" opacity="0.5"/>
+  <rect width="800" height="600" fill="#111111"/>
+  <rect x="300" y="200" width="200" height="200" rx="100" fill="#2a2a2a"/>
+  <circle cx="400" cy="280" r="12" fill="#22c55e" opacity="0.5"/>
+  <path d="M370 320 Q400 290 430 320" stroke="#22c55e" stroke-width="3" fill="none" stroke-linecap="round" opacity="0.5"/>
   <text x="400" y="370" text-anchor="middle" fill="#6b7280" font-size="16" font-family="sans-serif">Gambar tidak tersedia</text>
 </svg>`
 

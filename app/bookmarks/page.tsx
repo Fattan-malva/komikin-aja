@@ -16,7 +16,7 @@ function BookmarkCard({ item }: { item: Komik }) {
 
   return (
     <Link href={`/komik/${item.slug}`} className="block group">
-      <div className="w-40 sm:w-48 flex-shrink-0 bg-white/5 rounded-xl overflow-hidden border border-white/10 hover:border-purple-500/50 transition-all duration-300">
+      <div className="w-40 sm:w-48 flex-shrink-0 bg-white/5 rounded-xl overflow-hidden border border-white/10 hover:border-emerald-500/50 transition-all duration-300">
         <div className="aspect-[3/4] relative overflow-hidden bg-gray-800">
           <SafeImage
             src={urls.direct}
@@ -27,7 +27,7 @@ function BookmarkCard({ item }: { item: Komik }) {
           <TypeBadge type={(item as { type?: string }).type} />
         </div>
                     <div className="p-3 h-[52px] flex items-start">
-          <h3 className="text-sm font-semibold text-white line-clamp-2 group-hover:text-purple-400 transition-colors leading-tight">
+          <h3 className="text-sm font-semibold text-white line-clamp-2 group-hover:text-emerald-400 transition-colors leading-tight">
             {item.title}
           </h3>
         </div>
@@ -50,13 +50,13 @@ export default function BookmarksPage() {
   const gridRowsClass = bookmarks.length === 1 ? "grid-rows-1" : "grid-rows-2";
 
   return (
-    <div className="min-h-screen bg-[#0f0f1a] text-white p-6 rounded-lg">
+    <div className="min-h-screen bg-[#000000] text-white p-6 rounded-lg">
       {/* ✅ PERUBAHAN 2: space-y-8 → space-y-6 */}
       <div className="max-w-6xl mx-auto space-y-6">
         {/* ================= SECTION BOOKMARK ================= */}
         <section>
           <div className="flex items-center gap-3 mb-6">
-            <div className="p-2 bg-purple-600 rounded-lg">
+            <div className="p-2 bg-emerald-600 rounded-lg">
               <svg
                 className="w-5 h-5 text-white"
                 fill="none"

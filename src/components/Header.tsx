@@ -41,12 +41,12 @@ export default function Header() {
   return (
     <header
       ref={headerRef}
-      className={`sticky top-0 z-50 bg-[#0f0f1a]/80 backdrop-blur-md border-b border-white/5 transition-transform duration-300 ${hidden ? '-translate-y-full' : 'translate-y-0'}`}
+      className={`sticky top-0 z-50 bg-[#000000]/80 backdrop-blur-md border-b border-white/5 transition-transform duration-300 ${hidden ? '-translate-y-full' : 'translate-y-0'}`}
     >
       <div className="max-w-7xl mx-auto px-4 h-16 flex items-center justify-between">
         <Link href="/" className="flex items-center gap-2">
           <span className="text-xl font-bold text-white">
-            Komikin<span className="text-[#a855f7]">.Aja</span>
+            Komikin<span className="text-[#22c55e]">.Aja</span>
           </span>
         </Link>
 
@@ -85,7 +85,7 @@ export default function Header() {
       </div>
 
       {mobileOpen && (
-        <div className="md:hidden border-t border-white/5 bg-[#0f0f1a] px-4 py-4 space-y-4">
+        <div className="md:hidden border-t border-white/5 bg-[#000000] px-4 py-4 space-y-4">
           <SearchBar onSearch={() => setMobileOpen(false)} />
           <nav className="flex flex-col gap-2">
             <Link href="/" className="text-sm text-gray-300 hover:text-white py-1" onClick={() => setMobileOpen(false)}>

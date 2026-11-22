@@ -76,7 +76,7 @@ export const viewport: Viewport = {
   // Wajib untuk mode standalone: tanpa ini konten tertutup notch di iPhone dan
   // tertimpa home indicator di bagian bawah.
   viewportFit: "cover",
-  themeColor: "#0a0a0f",
+  themeColor: "#000000",
 };
 
 export default function RootLayout({

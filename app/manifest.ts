@@ -8,7 +8,7 @@ import type { MetadataRoute } from "next";
  * memberi nama serta warna status bar saat dibuka sebagai app.
  *
  * Catatan ikon: iOS TIDAK Gunnduk ikon bertransparent. Semua file sudah di-
- * flatten ke warna background situs (#0a0a0f) sebelum ditulis.
+ * flatten ke warna background situs (#000000) sebelum ditulis.
  */
 export default function manifest(): MetadataRoute.Manifest {
   return {
@@ -20,8 +20,8 @@ export default function manifest(): MetadataRoute.Manifest {
     scope: "/",
     display: "standalone",
     orientation: "portrait",
-    background_color: "#0a0a0f",
-    theme_color: "#0a0a0f",
+    background_color: "#000000",
+    theme_color: "#000000",
     lang: "id",
     dir: "ltr",
     categories: ["books", "entertainment"],

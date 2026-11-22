@@ -45,7 +45,7 @@ export default function Pagination({ currentPage, totalPages }: Props) {
           onClick={() => goToPage(p)}
           className={`px-3 py-1.5 text-sm rounded-lg transition-colors ${
             p === currentPage
-              ? 'bg-[#a855f7] text-white'
+              ? 'bg-[#22c55e] text-white'
               : 'bg-white/10 hover:bg-white/20 text-white'
           }`}
         >

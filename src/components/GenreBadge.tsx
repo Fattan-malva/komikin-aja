@@ -8,7 +8,7 @@ interface Props {
 
 export default function GenreBadge({ name, slug, source }: Props) {
   const content = (
-    <span className="inline-block px-3 py-1 text-xs font-medium rounded-full bg-[#a855f7]/10 text-[#a855f7] border border-[#a855f7]/20 hover:bg-[#a855f7]/20 transition-colors">
+    <span className="inline-block px-3 py-1 text-xs font-medium rounded-full bg-[#22c55e]/10 text-[#22c55e] border border-[#22c55e]/20 hover:bg-[#22c55e]/20 transition-colors">
       {name}
     </span>
   )
