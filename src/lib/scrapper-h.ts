@@ -206,6 +206,13 @@ function countPages(html: string, current: number): number {
       if (!Number.isNaN(value) && value > total) total = value;
     },
   );
+  // Sumber H menandai halaman berikutnya lewat <link rel="next">, bukan blok pagination.
+  $('link[rel="next"], a[href*="/page/"], a[href*="page="]').each((_, el) => {
+    const href = $(el).attr("href") ?? "";
+    const match = /\/page\/(\d+)/.exec(href) || /[?&]page=(\d+)/.exec(href);
+    if (match) total = Math.max(total, parseInt(match[1], 10));
+    else if (href && $(el).is("link")) total = Math.max(total, current + 1);
+  });
   return total;
 }
 
@@ -230,7 +237,18 @@ function parseReaderPayload(raw: string): Record<string, unknown> {
  * ------------------------------------------------------------------ */
 
 export async function getHomeH(page: number = 1): Promise<KomikListResponse> {
-  const path = page > 1 ? `/komik/page/${page}/?order=update` : `/komik/?order=update`;
+  // Sumber H mengabaikan /page/N/ saat ada query order; pakai param page.
+  const path = `/komik/?order=update&page=${page}`;
+  const html = await hFetch(path);
+  return {
+    komik: parseBsxList(html),
+    currentPage: page,
+    totalPages: countPages(html, page),
+  };
+}
+
+export async function getPopularH(page: number = 1): Promise<KomikListResponse> {
+  const path = `/komik/?order=popular&page=${page}`;
   const html = await hFetch(path);
   return {
     komik: parseBsxList(html),
@@ -243,7 +261,9 @@ export async function getGenreListH(): Promise<Genre[]> {
   const $ = cheerio.load(await hFetch("/"));
   const seen = new Map<string, Genre>();
   const add = (slug: string, name: string) => {
-    if (slug && name && !seen.has(slug)) seen.set(slug, { name: titleCase(name), slug });
+    // Sitemap punya variasi ejaan ("cat girl" vs "catgirl") untuk genre yang sama.
+    const key = name.toLowerCase().replace(/[^a-z0-9]/g, "");
+    if (slug && key && !seen.has(key)) seen.set(key, { name: titleCase(name), slug });
   };
 
   // Menu utama memakai label terbaik, tapi hanya sebagian genre yang ada.

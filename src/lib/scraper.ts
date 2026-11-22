@@ -16,7 +16,7 @@ import type {
  * Datanya diambil dari JSON API publik yang ditemukan resolver di resolve.ts.
  */
 
-const PAGE_SIZE = 24;
+const PAGE_SIZE = 20;
 const MAX_PAGES = 20;
 const MAX_WALK_STEPS = 20;
 const GENRE_CACHE_TTL = 60 * 60 * 1000;

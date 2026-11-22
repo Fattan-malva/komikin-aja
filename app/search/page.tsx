@@ -8,7 +8,7 @@ import { MODE_COOKIE, isHMode } from '@/src/lib/mode'
 import KomikGrid from '@/src/components/KomikGrid'
 import SearchBar from '@/src/components/SearchBar'
 import SearchFilters from '@/src/components/SearchFilters'
-import Pagination from '@/src/components/Pagination'
+import InfiniteKomik from '@/src/components/InfiniteKomik'
 import type { SearchFilters as SearchFiltersType } from '@/src/types'
 
 interface Props {
@@ -87,6 +87,13 @@ export default async function SearchPage({ searchParams }: Props) {
   const showResults = results.length > 0
   const showMoreLike = moreLike.length > 0
 
+  const apiParams = new URLSearchParams()
+  for (const [key, value] of Object.entries(sp)) {
+    if (value) apiParams.set(key, value)
+  }
+  apiParams.delete('page')
+  const apiEndpoint = `/api/search?${apiParams.toString()}`
+
   return (
     <div className="space-y-8">
       <div className="max-w-md mx-auto">
@@ -101,8 +108,13 @@ export default async function SearchPage({ searchParams }: Props) {
             </h2>
             <span className="text-sm text-gray-400">{results.length} found</span>
           </div>
-          <KomikGrid komik={results} />
-          <Pagination currentPage={page} totalPages={totalPages} />
+          <InfiniteKomik
+            key={`${hMode ? 'h' : 'k'}-${apiEndpoint}`}
+            initial={results}
+            initialPage={page}
+            totalPages={totalPages}
+            endpoint={apiEndpoint}
+          />
         </section>
       )}
       {showMoreLike && (

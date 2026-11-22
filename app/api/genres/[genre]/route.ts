@@ -9,7 +9,8 @@ export async function GET(
 ) {
   const { genre } = await params
   const page = Number(request.nextUrl.searchParams.get('page')) || 1
-  const hMode = isHMode(request.cookies.get(MODE_COOKIE)?.value)
+  const hMode = isHMode(request.cookies.get(MODE_COOKIE)?.value) ||
+    request.nextUrl.searchParams.get('source') === 'h'
   try {
     const data = await (hMode ? getGenreH(genre, page) : getGenre(genre, page))
     return Response.json(data)

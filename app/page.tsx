@@ -2,14 +2,13 @@ import { Suspense } from 'react'
 import { connection } from 'next/server'
 import { cookies } from 'next/headers'
 import { getHome, getDetail, getPopular, getManhwa, getManga, getManhua } from '@/src/lib/scraper'
-import { getHomeH, getDetailH } from '@/src/lib/scrapper-h'
+import { getHomeH, getDetailH, getPopularH, getGenreH } from '@/src/lib/scrapper-h'
 import { stripHPrefix } from '@/src/lib/utils'
 import { MODE_COOKIE, isHMode } from '@/src/lib/mode'
 import BannerCarousel from '@/src/components/BannerCarousel'
 import PopularScroll from '@/src/components/PopularScroll'
-import LatestUpdates from '@/src/components/LatestUpdates'
 import TypeScroll from '@/src/components/TypeScroll'
-import Pagination from '@/src/components/Pagination'
+import InfiniteKomik from '@/src/components/InfiniteKomik'
 import { SkeletonGrid } from '@/src/components/Skeleton'
 
 interface Props {
@@ -54,8 +53,8 @@ function BannerFallback() {
   return <div className="w-full h-[400px] sm:h-[500px] rounded-2xl mb-10 bg-white/5 animate-pulse" />
 }
 
-async function PopularSection() {
-  const data = await safe(() => getPopular(1), EMPTY)
+async function PopularSection({ hMode }: { hMode: boolean }) {
+  const data = await safe(() => (hMode ? getPopularH(1) : getPopular(1)), EMPTY)
   return <PopularScroll items={data.komik} />
 }
 
@@ -76,18 +75,18 @@ function ScrollFallback() {
   )
 }
 
-async function ManhwaSection() {
-  const data = await safe(() => getManhwa(1), EMPTY)
+async function ManhwaSection({ hMode }: { hMode: boolean }) {
+  const data = await safe(() => (hMode ? getGenreH('manhwa', 1) : getManhwa(1)), EMPTY)
   return <TypeScroll items={data.komik} title="Manhwa" />
 }
 
-async function MangaSection() {
-  const data = await safe(() => getManga(1), EMPTY)
+async function MangaSection({ hMode }: { hMode: boolean }) {
+  const data = await safe(() => (hMode ? getGenreH('manga', 1) : getManga(1)), EMPTY)
   return <TypeScroll items={data.komik} title="Manga" />
 }
 
-async function ManhuaSection() {
-  const data = await safe(() => getManhua(1), EMPTY)
+async function ManhuaSection({ hMode }: { hMode: boolean }) {
+  const data = await safe(() => (hMode ? getGenreH('manhua', 1) : getManhua(1)), EMPTY)
   return <TypeScroll items={data.komik} title="Manhua" />
 }
 
@@ -96,12 +95,14 @@ async function LatestSection({ searchParams, hMode }: Props & { hMode: boolean }
   const currentPage = Number(page) || 1
   const data = await safe(() => (hMode ? getHomeH(currentPage) : getHome(currentPage)), EMPTY)
   return (
-    <>
-      <LatestUpdates items={data.komik} />
-      {data.totalPages && data.totalPages > 1 && (
-        <Pagination currentPage={data.currentPage || 1} totalPages={data.totalPages} />
-      )}
-    </>
+    <InfiniteKomik
+      key={hMode ? 'h' : 'k'}
+      initial={data.komik}
+      initialPage={data.currentPage || currentPage}
+      totalPages={data.totalPages || 1}
+      endpoint="/api/komik"
+      variant="latest"
+    />
   )
 }
 
@@ -114,26 +115,21 @@ export default async function Home({ searchParams }: Props) {
         <BannerSection hMode={hMode} />
       </Suspense>
 
-      {/* Sumber H tidak menyediakan endpoint popular/per-tipe yang setara. */}
-      {!hMode && (
-        <>
-          <Suspense fallback={<ScrollFallback />}>
-            <PopularSection />
-          </Suspense>
+      <Suspense fallback={<ScrollFallback />}>
+        <PopularSection hMode={hMode} />
+      </Suspense>
 
-          <Suspense fallback={<ScrollFallback />}>
-            <ManhwaSection />
-          </Suspense>
+      <Suspense fallback={<ScrollFallback />}>
+        <ManhwaSection hMode={hMode} />
+      </Suspense>
 
-          <Suspense fallback={<ScrollFallback />}>
-            <MangaSection />
-          </Suspense>
+      <Suspense fallback={<ScrollFallback />}>
+        <MangaSection hMode={hMode} />
+      </Suspense>
 
-          <Suspense fallback={<ScrollFallback />}>
-            <ManhuaSection />
-          </Suspense>
-        </>
-      )}
+      <Suspense fallback={<ScrollFallback />}>
+        <ManhuaSection hMode={hMode} />
+      </Suspense>
 
       <Suspense fallback={<SkeletonGrid />}>
         <LatestSection searchParams={searchParams} hMode={hMode} />

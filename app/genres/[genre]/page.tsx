@@ -3,8 +3,7 @@ import { cookies } from 'next/headers'
 import { getGenre } from '@/src/lib/scraper'
 import { getGenreH } from '@/src/lib/scrapper-h'
 import { MODE_COOKIE, isHMode } from '@/src/lib/mode'
-import GenreTypeFilter from '@/src/components/GenreTypeFilter'
-import Pagination from '@/src/components/Pagination'
+import InfiniteKomik from '@/src/components/InfiniteKomik'
 import type { KomikListResponse } from '@/src/types'
 
 interface Props {
@@ -41,12 +40,14 @@ export default async function GenrePage({ params, searchParams }: Props) {
     <div>
       <h1 className="text-2xl font-bold text-white mb-6 capitalize">Genre: {genre.replace(/-/g, ' ')}</h1>
       {data.komik.length > 0 ? (
-        <>
-          <GenreTypeFilter komik={data.komik} />
-          {data.totalPages && data.totalPages > 1 && (
-            <Pagination currentPage={data.currentPage || pageNum} totalPages={data.totalPages} />
-          )}
-        </>
+        <InfiniteKomik
+          key={`${hMode ? 'h' : 'k'}-${genre}`}
+          initial={data.komik}
+          initialPage={data.currentPage || pageNum}
+          totalPages={data.totalPages || 1}
+          endpoint={`/api/genres/${encodeURIComponent(genre)}${source === 'h' ? '?source=h' : ''}`}
+          typeFilter
+        />
       ) : (
         <p className="text-gray-400">Tidak ada komik ditemukan untuk genre ini.</p>
       )}
