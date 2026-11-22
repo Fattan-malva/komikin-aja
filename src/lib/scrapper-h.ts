@@ -242,13 +242,26 @@ export async function getHomeH(page: number = 1): Promise<KomikListResponse> {
 export async function getGenreListH(): Promise<Genre[]> {
   const $ = cheerio.load(await hFetch("/"));
   const seen = new Map<string, Genre>();
+  const add = (slug: string, name: string) => {
+    if (slug && name && !seen.has(slug)) seen.set(slug, { name: titleCase(name), slug });
+  };
+
+  // Menu utama memakai label terbaik, tapi hanya sebagian genre yang ada.
   $('a[href*="/genres/"]').each((_, el) => {
     const href = ($(el).attr("href") ?? "").split("?")[0];
     const raw = href.replace(/\/+$/, "").split("/").pop() ?? "";
-    const slug = slugify(decodeURIComponent(raw));
-    const name = $(el).text().trim();
-    if (slug && name && !seen.has(slug)) seen.set(slug, { name: titleCase(name), slug });
+    add(slugify(decodeURIComponent(raw)), $(el).text().trim());
   });
+
+  // Sitemap memuat semua genre aktif, termasuk `full-color`, `manga`,
+  // `manhua`, `manhwa`, dan genre lain yang tidak dipasang di menu.
+  // Sitemap gagal pun genre dari menu tetap dipakai.
+  const sitemap = await hFetch("/genres-sitemap.xml").catch(() => "");
+  for (const match of sitemap.matchAll(/\/genres\/([^<"?]+\/?)<\/loc>/g)) {
+    const slug = slugify(decodeURIComponent(match[1].replace(/\/+$/, "")));
+    add(slug, slug.replace(/-/g, " "));
+  }
+
   return [...seen.values()].sort((a, b) => a.name.localeCompare(b.name, "id"));
 }
 

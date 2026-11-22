@@ -34,7 +34,10 @@ export default async function SearchPage({ searchParams }: Props) {
     if (hMode) {
       // Mode H: jangan pernah ikutkan hasil dari sumber komik biasa.
       const res = await searchKomikH(query, page)
-      results = res.komik
+      const wantType = filters.type?.toLowerCase()
+      results = wantType
+        ? res.komik.filter(k => (k.type ?? '').toLowerCase() === wantType)
+        : res.komik
       if (res.totalPages) totalPages = res.totalPages
     } else {
       const [regular, h] = await Promise.allSettled([
@@ -79,7 +82,7 @@ export default async function SearchPage({ searchParams }: Props) {
       <div className="max-w-md mx-auto">
         <SearchBar initialQuery={query} />
       </div>
-      {!hMode && <SearchFilters filters={filters} query={query} />}
+      <SearchFilters filters={filters} query={query} />
       {query && showResults && (
         <section>
           <div className="flex items-center justify-between mb-4">

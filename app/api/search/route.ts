@@ -15,7 +15,11 @@ export async function GET(request: NextRequest) {
     const hMode = isHMode(request.cookies.get(MODE_COOKIE)?.value)
     let komik: Awaited<ReturnType<typeof searchKomik>>['komik'] = []
     if (hMode) {
-      komik = (await searchKomikH(query, page)).komik
+      const res = await searchKomikH(query, page)
+      const wantType = sp.get('type')?.toLowerCase()
+      komik = wantType
+        ? res.komik.filter(k => (k.type ?? '').toLowerCase() === wantType)
+        : res.komik
     } else {
       const filters: SearchFilters = {}
       for (const key of ['genre', 'type', 'status', 'author', 'artist', 'exclude', 'project', 'order', 'orderby'] as const) {

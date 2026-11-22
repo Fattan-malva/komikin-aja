@@ -9,7 +9,13 @@ interface Props {
   query: string
 }
 
-const TYPE_OPTIONS = ['', 'Manga', 'Manhwa', 'Manhua', 'Manhwa Manhua']
+const TYPE_OPTIONS = [
+  { value: '', label: 'All Types' },
+  { value: 'manhwa', label: 'Manhwa (Korea)' },
+  { value: 'manga', label: 'Manga (Jepang)' },
+  { value: 'manhua', label: 'Manhua (China)' },
+  { value: 'Manhwa Manhua', label: 'Manhwa Manhua' },
+]
 const STATUS_OPTIONS = ['', 'Ongoing', 'Completed']
 const ORDERBY_OPTIONS = [
   { value: 'popular', label: 'Popular' },
@@ -90,7 +96,7 @@ export default function SearchFilters({ filters, query }: Props) {
                 className="w-full bg-white/5 border border-white/10 rounded px-2 py-1.5 text-sm text-white"
               >
                 {TYPE_OPTIONS.map(t => (
-                  <option key={t} value={t}>{t || 'All Types'}</option>
+                  <option key={t.value} value={t.value}>{t.label}</option>
                 ))}
               </select>
             </div>
