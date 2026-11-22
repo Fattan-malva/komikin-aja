@@ -1,3 +1,5 @@
+import type { Komik, SearchFilters } from '@/src/types'
+
 export function isHSlug(slug: string): boolean {
   return slug.startsWith('h-')
 }
@@ -39,6 +41,29 @@ export function formatDate(value: string | undefined | null): string | undefined
 
 export function slugify(text: string): string {
   return text.toLowerCase().replace(/[\s/]+/g, '-').replace(/[^a-z0-9-]/g, '').replace(/-+/g, '-').replace(/^-|-$/g, '')
+}
+
+/** Saring daftar dari endpoint list (bukan pencarian) memakai filter pencilan. */
+export function filterKomik(list: Komik[], filters: SearchFilters): Komik[] {
+  const items = list.filter(k => {
+    if (filters.genre && !(k.genres ?? []).some(g => slugify(g) === slugify(filters.genre!))) return false
+    if (filters.type && (k.type ?? '').toLowerCase() !== filters.type.toLowerCase()) return false
+    if (filters.status && (k.status ?? '').toLowerCase() !== filters.status.toLowerCase()) return false
+    if (filters.author && !(k.author ?? '').toLowerCase().includes(filters.author.toLowerCase())) return false
+    if (filters.artist && !(k.artist ?? '').toLowerCase().includes(filters.artist.toLowerCase())) return false
+    return true
+  })
+
+  const dir = filters.order === 'asc' ? 1 : -1
+  if (filters.orderby === 'rating') {
+    items.sort((a, b) => (parseFloat(a.rating || '0') - parseFloat(b.rating || '0')) * dir)
+  } else if (filters.orderby === 'updated') {
+    items.sort((a, b) => (a.date || '').localeCompare(b.date || '') * dir)
+  } else if (filters.orderby === 'title') {
+    items.sort((a, b) => a.title.localeCompare(b.title, 'id') * dir)
+  }
+  // `popular` sudah diurutkan sumbernya; `bookmarked` butuh data lokal browser.
+  return items
 }
 
 export function proxyImage(url: string): string {

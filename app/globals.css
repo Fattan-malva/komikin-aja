@@ -24,6 +24,13 @@ body {
   padding-right: env(safe-area-inset-right);
 }
 
+/* iOS Safari zoom otomatis saat fokus jika ukuran teks form di bawah 16px. */
+input,
+select,
+textarea {
+  font-size: 16px !important;
+}
+
 /* Header-nya sticky, jadi padding atas harus ikut supaya tidak tertutup notch
    ketika digulir di mode standalone. */
 header {

@@ -3,6 +3,7 @@ import { cookies } from 'next/headers'
 import { searchKomik } from '@/src/lib/scraper'
 import { searchKomikH } from '@/src/lib/scrapper-h'
 import { computeRelevance } from '@/src/lib/utils'
+import { getFilteredList } from '@/src/lib/list-filter'
 import { MODE_COOKIE, isHMode } from '@/src/lib/mode'
 import KomikGrid from '@/src/components/KomikGrid'
 import SearchBar from '@/src/components/SearchBar'
@@ -25,6 +26,7 @@ export default async function SearchPage({ searchParams }: Props) {
   for (const key of ['genre', 'type', 'status', 'author', 'artist', 'exclude', 'project', 'order', 'orderby'] as const) {
     if (sp[key]) (filters as Record<string, string>)[key] = sp[key]!
   }
+  const hasFilters = Object.keys(filters).length > 0
 
   let results: Awaited<ReturnType<typeof searchKomik>>['komik'] = []
   let moreLike: Awaited<ReturnType<typeof searchKomik>>['komik'] = []
@@ -72,6 +74,14 @@ export default async function SearchPage({ searchParams }: Props) {
         return parseFloat(b.rating || '0') - parseFloat(a.rating || '0')
       })
     }
+  } else if (hasFilters) {
+    try {
+      const res = await getFilteredList(hMode, filters, page)
+      results = res.komik
+      if (res.totalPages) totalPages = res.totalPages
+    } catch {
+      // hasil tetap kosong
+    }
   }
 
   const showResults = results.length > 0
@@ -83,11 +93,11 @@ export default async function SearchPage({ searchParams }: Props) {
         <SearchBar initialQuery={query} />
       </div>
       <SearchFilters filters={filters} query={query} />
-      {query && showResults && (
+      {showResults && (query || hasFilters) && (
         <section>
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-lg font-bold text-white">
-              Results for <span className="text-[#22c55e]">{query}</span>
+              {query ? <>Results for <span className="text-[#22c55e]">{query}</span></> : 'Filter Results'}
             </h2>
             <span className="text-sm text-gray-400">{results.length} found</span>
           </div>
@@ -101,14 +111,15 @@ export default async function SearchPage({ searchParams }: Props) {
           <KomikGrid komik={moreLike} />
         </section>
       )}
-      {query && !showResults && !showMoreLike && (
+      {!showResults && !showMoreLike && (
         <div className="text-center py-16">
-          <p className="text-gray-400">Tidak ada hasil untuk &ldquo;{query}&rdquo;</p>
-        </div>
-      )}
-      {!query && !showResults && !showMoreLike && (
-        <div className="text-center py-16">
-          <p className="text-gray-400">Cari komik favoritmu</p>
+          <p className="text-gray-400">
+            {query
+              ? <>Tidak ada hasil untuk &ldquo;{query}&rdquo;</>
+              : hasFilters
+                ? 'Tidak ada hasil untuk filter ini'
+                : 'Cari komik favoritmu'}
+          </p>
         </div>
       )}
     </div>

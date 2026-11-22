@@ -1,6 +1,6 @@
 import { getJson, postJson, isTransientError, mapWithConcurrency } from "./http";
 import { invalidatePrimarySource, resolvePrimarySource } from "./resolve";
-import { computeRelevance, formatDate, sanitizeHtml, slugify } from "./utils";
+import { computeRelevance, filterKomik, formatDate, sanitizeHtml, slugify } from "./utils";
 import type {
   Chapter,
   ChapterDetail,
@@ -536,16 +536,14 @@ export async function searchKomik(
 
   let items = [...collected.values()].map((raw) => mapListItem(raw));
 
-  if (filters?.genre) {
-    const want = slugify(filters.genre);
-    items = items.filter((k) =>
-      (k.genres ?? []).some((g) => slugify(g) === want),
-    );
-  }
-  if (filters?.type) {
-    const want = filters.type.toLowerCase();
-    items = items.filter((k) => (k.type ?? "").toLowerCase() === want);
-  }
+  // Author/artist belum ada di hasil API, jadi disaring setelah detail diambil.
+  if (filters) items = filterKomik(items, {
+    genre: filters.genre,
+    type: filters.type,
+    status: filters.status,
+    orderby: filters.orderby,
+    order: filters.order,
+  });
 
   items.sort((a, b) => {
     const relA = computeRelevance(a.title, term);
@@ -573,7 +571,12 @@ export async function searchKomik(
     };
   });
 
-  return { komik, currentPage: current, totalPages };
+  // shortcut: author/artist hanya ada di detail, jadi filter ini berlaku per halaman.
+  const finalKomik = filters?.author || filters?.artist
+    ? filterKomik(komik, { author: filters.author, artist: filters.artist })
+    : komik;
+
+  return { komik: finalKomik, currentPage: current, totalPages };
 }
 
 let genreCache: { at: number; genres: Genre[] } | null = null;
