@@ -24,6 +24,8 @@ export default function Reader({ slug, chapterId, data }: Props) {
   const [readChapters] = useState(() => getReadChapters());
   const [autoScrollEnabled, setAutoScrollEnabled] = useState(false);
   const [autoScrollSpeed, setAutoScrollSpeed] = useState(0.5);
+  // CDN sumber menolak permintaan gambar bersamaan dari serverless Vercel.
+  const [loadedImages, setLoadedImages] = useState(1);
 
 
   useEffect(() => {
@@ -117,15 +119,19 @@ export default function Reader({ slug, chapterId, data }: Props) {
           </div>
         ) : (
           data.images.map((img, i) => {
+            if (i >= loadedImages) return null
             const urls = getImageUrls(img)
+            const next = () => setLoadedImages(n => Math.max(n, i + 2))
             return (
               <div key={i} className="w-full bg-black/20">
                 <SafeImage
-                  src={urls.direct}
-                  proxySrc={urls.proxy}
+                  src={urls.proxy}
+                  proxySrc={urls.direct}
                   alt={`${chapterId} - Page ${i + 1}`}
                   className="w-full h-auto mx-auto"
                   loading="eager"
+                  onLoad={next}
+                  onError={next}
                 />
               </div>
             )

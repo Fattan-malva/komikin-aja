@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 
-interface SafeImageProps extends Omit<React.ImgHTMLAttributes<HTMLImageElement>, 'src' | 'onError'> {
+interface SafeImageProps extends Omit<React.ImgHTMLAttributes<HTMLImageElement>, 'src'> {
   src: string
   proxySrc: string
 }
