@@ -121,11 +121,11 @@ export default function Reader({ slug, chapterId, data }: Props) {
             return (
               <div key={i} className="w-full bg-black/20">
                 <SafeImage
-                  src={urls.direct}
-                  proxySrc={urls.proxy}
+                  src={urls.proxy}
+                  proxySrc={urls.direct}
                   alt={`${chapterId} - Page ${i + 1}`}
                   className="w-full h-auto mx-auto"
-                  loading="lazy"
+                  loading="eager"
                 />
               </div>
             )
