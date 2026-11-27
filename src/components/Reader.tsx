@@ -24,9 +24,24 @@ export default function Reader({ slug, chapterId, data }: Props) {
   const [readChapters] = useState(() => getReadChapters());
   const [autoScrollEnabled, setAutoScrollEnabled] = useState(false);
   const [autoScrollSpeed, setAutoScrollSpeed] = useState(0.5);
+  // URL dari SSR cepat kedaluwarsa; ambil yang segar dari API setelah mount.
+  const [images, setImages] = useState<string[] | null>(null)
   // CDN sumber menolak permintaan gambar bersamaan dari serverless Vercel.
-  const [loadedImages, setLoadedImages] = useState(1);
+  const [loadedImages, setLoadedImages] = useState(1)
 
+  useEffect(() => {
+    let alive = true
+    fetch(`/api/komik/${encodeURIComponent(slug)}/${encodeURIComponent(chapterId)}`)
+      .then(r => (r.ok ? r.json() : Promise.reject()))
+      .then((fresh: ChapterDetail) => {
+        if (alive && fresh.images?.length) {
+          setImages(fresh.images)
+          setLoadedImages(1)
+        }
+      })
+      .catch(() => { if (alive) setImages(data.images) })
+    return () => { alive = false }
+  }, [slug, chapterId, data.images])
 
   useEffect(() => {
     if (!autoScrollEnabled) return;
@@ -118,7 +133,7 @@ export default function Reader({ slug, chapterId, data }: Props) {
             />
           </div>
         ) : (
-          data.images.map((img, i) => {
+          (images ?? []).map((img, i) => {
             if (i >= loadedImages) return null
             const urls = getImageUrls(img)
             const next = () => setLoadedImages(n => Math.max(n, i + 2))
