@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import type { Chapter, ChapterDetail } from "@/src/types";
 import { getImageUrls } from "@/src/lib/utils";
 import { SafeImage } from "@/src/components/SafeImage";
@@ -24,22 +24,33 @@ export default function Reader({ slug, chapterId, data }: Props) {
   const [readChapters] = useState(() => getReadChapters());
   const [autoScrollEnabled, setAutoScrollEnabled] = useState(false);
   const [autoScrollSpeed, setAutoScrollSpeed] = useState(0.5);
-  // URL dari SSR cepat kedaluwarsa; ambil yang segar dari API setelah mount.
-  const [images, setImages] = useState<string[] | null>(null)
-  // CDN sumber menolak permintaan gambar bersamaan dari serverless Vercel.
-  const [loadedImages, setLoadedImages] = useState(1)
+  // Setiap gambar butuh sesi tanda tangan baru, dan CDN menolak request bersamaan.
+  const [images, setImages] = useState<string[]>([])
+  const imageDone = useRef<() => void>(() => {})
 
   useEffect(() => {
     let alive = true
-    fetch(`/api/komik/${encodeURIComponent(slug)}/${encodeURIComponent(chapterId)}`)
-      .then(r => (r.ok ? r.json() : Promise.reject()))
-      .then((fresh: ChapterDetail) => {
-        if (alive && fresh.images?.length) {
-          setImages(fresh.images)
-          setLoadedImages(1)
-        }
-      })
-      .catch(() => { if (alive) setImages(data.images) })
+    const collected: string[] = []
+    ;(async () => {
+      for (let i = 0; i < data.images.length; i++) {
+        if (!alive) return
+        let url = data.images[i]
+        try {
+          const r = await fetch(
+            `/api/komik/${encodeURIComponent(slug)}/${encodeURIComponent(chapterId)}?_=${i}`,
+          )
+          const fresh: ChapterDetail = await r.json()
+          url = fresh.images?.[i] || url
+        } catch {}
+        if (!alive) return
+        collected.push(url)
+        setImages([...collected])
+        await new Promise<void>(resolve => {
+          imageDone.current = resolve
+          setTimeout(resolve, 20000)
+        })
+      }
+    })()
     return () => { alive = false }
   }, [slug, chapterId, data.images])
 
@@ -133,10 +144,13 @@ export default function Reader({ slug, chapterId, data }: Props) {
             />
           </div>
         ) : (
-          (images ?? []).map((img, i) => {
-            if (i >= loadedImages) return null
+          images.map((img, i) => {
             const urls = getImageUrls(img)
-            const next = () => setLoadedImages(n => Math.max(n, i + 2))
+            const next = () => {
+              const done = imageDone.current
+              imageDone.current = () => {}
+              done()
+            }
             return (
               <div key={i} className="w-full bg-black/20">
                 <SafeImage
